@@ -53,7 +53,7 @@ function parse_commandline()
             help = "Thinning factor per sample"
         "--nchains"
             arg_type = Int
-            default = 4
+            default = 1
             help = "Number of parallel chains to use"
         "--p_mean"
             arg_type = Float64

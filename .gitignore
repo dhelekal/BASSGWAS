@@ -39,31 +39,11 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
-# pkgdown site
-docs/
-
 # translation temp files
 po/*~
 
 # RStudio Connect folder
 rsconnect/
 /data
-/julia/results
-julia/model/data_ponly.json
-julia/model/data.json
 *.so
-tigs.csv
-wTGS_julia/data/pop_struct.csv
-wTGS_julia/data/vcv.csv
-wTGS_julia/data_big/pop_struct.csv
-wTGS_julia/data_big/tree.nwk
-wTGS_julia/.DS_Store
 .DS_Store
-.DS_Store
-/benchmark_cip
-/benchmark_tet
-.DS_Store
-/mapping
-test.jl
-/outtest
-/test

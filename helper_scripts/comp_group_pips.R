@@ -2,6 +2,14 @@
 #| name: comp_group_pips
 #| description: compute variant group PIPs
 
+#| description: variant groups file. Must have variant column, and a group column
+#| required: true
+gfile <- NULL
+
+#| description: output file name
+#| required: true
+out <- NULL
+
 #| description: par_draws file
 #| required: true
 par_draws <- NULL
@@ -14,14 +22,6 @@ gammas_draws <- NULL
 #| required: true
 vars2patts <- NULL
 
-#| description: variant groups file. Must have variant column, and a group column
-#| required: true
-gfile <- NULL
-
-#| description: output file name
-#| required: true
-out <- NULL
-
 library(tidyverse)
 Sys.setenv(VROOM_CONNECTION_SIZE = 1500072)
 
@@ -29,7 +29,6 @@ pars <- vroom::vroom(par_draws, show_col_types = FALSE, progress = FALSE, altrep
 pars <- pars %>% mutate(Z=Z/sum(Z),iteration=row_number())
 Z <- pars$Z
 nr <- nrow(pars)
-
 
 gammas <- vroom::vroom(paste0(gammas_draws), show_col_types = FALSE, progress = FALSE, altrep = FALSE)
 gammas <- gammas[,3:ncol(gammas)] > 0 

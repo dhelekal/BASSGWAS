@@ -18,7 +18,7 @@ svd_threshold <- 0.99
 #| description: Allele frequency filter threshold
 af_threshold <- 0.0
 
-#| description: Identifiers of isolates to drop
+#| description: Text file with isolate identifiers of isolates to drop
 #| required: false
 to_drop <- NA_character_
 

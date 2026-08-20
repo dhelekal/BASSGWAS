@@ -142,26 +142,24 @@ u_draws = read_chains(refile)
 #Experimental design
 println("Designing next experiment ...")
 #Skip if batch size = 0
-if batch_sz > 0
+betasf = flatten_chains(betas_draws) #reshape(permutedims(betas_draws,(1,3,2)), :, size(betas_draws,2))
+iceptf = flatten_chains(cpars_draws[:, 5, :]) #reshape(cpars_draws[:,5,:], :, 1)
+usf = flatten_chains(u_draws)
+zz = flatten_chains(cpars_draws[:, 6, :]) #reshape(cpars_draws[:, 6, :], :)
+Zs = (zz ./ sum(zz))
 
-    betasf = flatten_chains(betas_draws) #reshape(permutedims(betas_draws,(1,3,2)), :, size(betas_draws,2))
-    iceptf = flatten_chains(cpars_draws[:, 5, :]) #reshape(cpars_draws[:,5,:], :, 1)
-    usf=flatten_chains(u_draws)
-    zz = flatten_chains(cpars_draws[:, 6, :]) #reshape(cpars_draws[:, 6, :], :)
-    Zs = (zz ./ sum(zz))
+n_samp = size(data[:,1], 1)
+idx_rem = (1:n_samp)[1:n_samp .∉ Ref(idx_obs)]
 
-    n_samp = size(data[:,1], 1)
-    idx_rem = (1:n_samp)[1:n_samp .∉ Ref(idx_obs)]
+design = optimize_design(idx_rem, U, S, X, iceptf, betasf, usf, Zs, batch_sz; randdes=false, idx_fixed=idx_fixed)
+selected = data[sort([idx_obs; design[1]]), 1]
 
-    design = optimize_design(idx_rem, U, S, X, iceptf, betasf, usf, Zs, batch_sz; randdes=false, idx_fixed=idx_fixed)
-    selected = data[sort([idx_obs; design[1]]), 1]
+println("Design objective value: $(design[2])")
 
-    println("Design objective value: $(design[2])")
-    println("Writing design ...")
-    outfile = parsed["ofile"]
-    open(outfile, "w") do f
-        for i in selected
-            println(f, i)
-        end
+println("Writing design ...")
+outfile = parsed["ofile"]
+open(outfile, "w") do f
+    for i in selected
+        println(f, i)
     end
 end
