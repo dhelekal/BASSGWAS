@@ -2,11 +2,11 @@
 #| name: prepare_data
 #| description: Preprocess BASSGWAS input data
 
-#| description: Variant presence absence tab-delimited file. Each row must correspond to a variant. First column will be used as variant ID. Column names must match sample ids.
+#| description: Variant presence absence tab-delimited file. Each row must correspond to a variant. First column will be used as variant ID. Column names must match sample names.
 #| required: true
 vfile <- NULL
 
-#| description: Tree file in newick format. Tip names must match sample names
+#| description: Tree file in newick format. Tip names must match sample names.
 #| required: true
 tfile <- NULL
 

@@ -47,3 +47,5 @@ rsconnect/
 /data
 *.so
 .DS_Store
+/docs/gwas_outputs
+/docs/gwas_inputs

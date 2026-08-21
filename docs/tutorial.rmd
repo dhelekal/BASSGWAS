@@ -1,0 +1,186 @@
+---
+title: "BASSGWAS Tutorial"
+author: David Helekal
+date: Aug 20, 2026
+output: 
+    md_document:
+        toc: true
+---
+
+First we load the necessary libraries used in this tutorial
+```{r setup, warning=FALSE, message=FALSE}
+library(ape)
+library(ggtree)
+library(tidyverse)
+library(ggplot2)
+
+set.seed(1)
+```
+
+```{bash, warning=FALSE, message=FALSE, error=TRUE}
+rm -r round1
+rm -r round2
+rm -r round3
+rm -r gwas_inputs
+rm -r gwas_outputs
+```
+
+# Introduction
+This tutorial assumes that you have previously downloaded the helper & launch scripts in this repository.
+The first section of the tutorial covers the general usage of the GWAS model. 
+The second section covers adaptive experimental design.
+
+Throughout this tutorial we will be using the toy data found in the `sample_data` folder.
+This is a version of the ciprofloxacin resistance benchmark datasets used in the manuscript modified to contain only 20,000 unique variants.
+The toy dataset uses *unitigs* to characterise genetic variation.
+
+# Input Data
+Using BASSGWAS requires two main data files: a variant presence-absence file, and a phylogeny file in the newick formati. 
+Both the phylogeny and variant presence-absence should be constructed for the entire collection at hand. The first column of the variant file should contain unique variant identifiers. 
+The remaining columns should each correspond to an isolate, and the first row contain unique isolate identifiers:
+
+|variant_id|isolate_1|isolate_2|isolate_3| ... |isolate_n|
+|----------|---------|---------|---------|-----|---------|
+|variant_1 |1        |1        |0        | ... |1        |
+|variant_2 |1        |1        |0        | ... |1        |
+|variant_3 |0        |1        |1        | ... |0        |
+|... |...        |...        |...        | ... |...      |
+|variant_n |0        |0        |1        | ... |0        |
+
+The isolate indentifiers must be shared between the variant file and the phylogeny. 
+
+
+
+## Note on Input Types
+Representing genetic variation in bacterial populations is an active area of research.
+There are many distinct approaches, for example using VCFs, unitigs, kmers, gene presence absence, etc.
+To ensure proper functionality of BASSGWAS, the representation of genetic variation should be both *comprehensive*, and *precise*.
+This is especially important when using adaptive sequential sampling. Unitigs are usually a good choice. 
+
+**DO NOT use adaptive sequential sampling with highly redundant representations such as kmers**
+
+**DO NOT use adaptive sequential sampling with gene presence absence data alone**
+
+## Inspecting the input data
+The variant file in the toy dataset uses unitigs as variant identifiers and `sra` accession numbers as isolate identifiers.
+```{r show inputs,warning=FALSE}
+vroom::vroom("../sample_data/variants.rtab",
+    altrep=F, progress=F, show_col_types = FALSE) %>%   
+    print(unitigs, n = 5, max_extra_cols = 0,width=60)
+```
+## Preparing the inputs
+To generate the input files needed for use BASSGWAS, we will need to use the data preprocessing script.
+First we will create a directory for storing the generated input files.
+
+```{bash, warning=FALSE, message=FALSE, results = 'hide'}
+mkdir gwas_inputs
+```
+
+Next we will use the data preprocessing script `prepare_data.R` to process the variant presence-absence file and the phylogeny into BASSGWAS inputs.
+As a part of preprocessing, variant presence absence patterns will be standardised, centred, and deduplicated. The phylogeny is used to compute a factorised, low rank, similarity matrix.
+```{bash}
+Rapp ../helper_scripts/prepare_data.R --help
+```
+The `--af-threshold` can be used to set an optional allele frequency filter. 
+
+We will now use the script to preprocess the toy data.
+```{bash, warning=FALSE, message=FALSE, results = 'hide'}
+Rapp ../helper_scripts/prepare_data.R ../sample_data/variants.rtab ../sample_data/tree.tre --odir gwas_inputs
+```
+This generated input files in the `gwas_inputs` directory. 
+The following two files are subsequently used with BASSGWASS:
+
+- `patterns_centred.csv` a centred, minorized, and deduplicated variant presence absence file for use with BASSGWAS.
+
+- `U.csv` & `S.csv` a low factorisation of the correlation matrix implied by the phylogeny for use with BASSGWAS.
+ 
+The `vars2patts.csv` file maps between the original variant identifiers and the deduplicated variants that form `patterns_centred.csv`:
+```{r show variant map,warning=FALSE}
+vroom::vroom("gwas_inputs/vars2patts.csv",
+    altrep=F, progress=F, show_col_types = FALSE) %>%   
+    print(unitigs, n = 4, max_extra_cols = 0,width=60)
+```
+
+- `pattern_id` contains the column index in `patterns_centred.csv`. 
+
+- `variant` contains the original variant identifier. 
+
+- `direction` is equal to $-1$ if the original variant was complemented as $1-v$. 
+
+Additionally an uncentred, binary version of the pattern file was generated as `patterns.csv`.
+
+## GWAS
+### `bassgwass-run.jl` usage
+```
+bassgwas-run.jl --pfile PFILE --ufile UFILE --sfile SFILE
+                --obsfile OBSFILE --odir ODIR --batchsz BATCHSZ
+                [--inclnext INCLNEXT] [--seed SEED]
+                [--ndraws NDRAWS] [--nthin NTHIN]
+                [--nchains NCHAINS] [--p_mean P_MEAN]
+                [--pr_0 PR_0] [--randdes] [-h]
+```
+###
+
+- `--pfile` `patterns_centred.csv` variant file
+
+- `--ufile` `U.csv` left singular vectors for population structure correction
+
+- `--sfile` `S.csv` singular values for population structure correction
+
+- `--odir` output directory
+
+- `--batchsz` batch size for experimental design. If set to 0, experimental design will be disabled
+
+- `--inclnext` path to a file listing isolate identifiers to include in the next experimental designs, one per line
+
+- `--seed` random seed. Default: `0`
+
+- `--n_draws` number of draws per chain. Default: `1000`
+
+- `--n_thin` thinning factor per draw. Default: `500`
+
+- `--n_chains` number of parallel chains to run. Default: `4`
+
+- `--p_mean` prior mean number of causal variants conditional on at least one effect. Default: `5`
+
+- `--pr_0` prior probability of 0 effects. Default: `0.25`
+
+- `--randdes` flag indicated a random design should be returned. You probably don't want to use this.
+
+- `-h --help` print help and exit. 
+
+With the inputs ready, we can now run the GWAS model. 
+BASSGWAS uses efficient MCMC sampling and will create multiple files with MCMC draws when finished, 
+along with a file specifying a batch of isolates for subsequent phenotyping if requested.
+
+**NOTE the generated files are large. For 100k variants, 4000 draws require approximately 60GB of storage**
+
+### Running GWAS on the toy dataset
+We will now demonstrate GWAS functionality on the toy dataset. We will run 2 chains in parallel each for a total of $250\times 500$ iterations. Moreover we will parallelize each chain across 2 CPU cores using `julia -t2`. To speed things up, we will downsample the full dataset to 200 isolates.
+
+```{r downsample data, warning=FALSE, message=FALSE}
+dat_small <- read_csv("../sample_data/data_bin.csv") %>% 
+    slice_sample(n = 200)
+dat_small %>% group_by(cip) %>% 
+    summarise(count=n())
+
+dat_small %>% write_csv("gwas_inputs/data200.csv")
+```
+
+We're now ready to run BASSGWAS. As the toy dataset only contains 10000 variants, this should only take a few minutes.
+```{bash, warning=FALSE, message=FALSE}
+mkdir gwas_outputs
+julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile gwas_inputs/data200.csv --odir gwas_outputs --batchsz 0 --ndraws 500 --nthin 250 --nchains 2
+```
+
+When using BASSGWAS with real data using up to 4 threads per chain is recommended. It's a good idea to aim for at least 250 samples per chain.
+
+### Identifying associations 
+
+When using BASSGWAS with real data using up to 4 threads per chain is recommended.
+
+## Adaptive experimental design
+
+
+
+

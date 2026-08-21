@@ -42,7 +42,7 @@ function parse_commandline()
         "--seed"
             arg_type = Int
             default = 0
-            help = "Design batch size"
+            help = "Rng seed"
         "--ndraws"
             arg_type = Int
             default = 1000
@@ -143,7 +143,7 @@ end
 
 #Actual set up begins here
 println("Adding worker processes ...")
-addprocs(nchains)
+addprocs(nchains, exeflags="--threads=$(Threads.nthreads())")
 println("Done")
 
 @everywhere begin
