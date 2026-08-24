@@ -34,7 +34,7 @@ gammas <- vroom::vroom(paste0(gammas_draws), show_col_types = FALSE, progress = 
 gammas <- gammas[,3:ncol(gammas)] > 0 
 stopifnot(nrow(gammas)==nr)
 
-variants <-vroom::vroom(vars2patts)
+variants <-vroom::vroom(vars2patts,show_col_types = FALSE, progress = FALSE, altrep = FALSE)
 groups <- vroom::vroom(gfile) %>% 
 	left_join(variants) %>%
 	select(pattern_id, group) %>%
