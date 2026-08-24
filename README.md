@@ -39,7 +39,7 @@ The helper scripts require a working `R` installation along with the following p
 ### Package installation
 Usen the `julia` package manager to install BASSGWAS from `github`: `] add https://github.com/dhelekal/BASSGWAS.git:BASSGWAS`
 ## Usage
-Using BASSGWAS requires a variant presence-absence file together with a phylogeny that describes the population structure. See the [tutorial](docs/utorial.md) before use.
+Using BASSGWAS requires a variant presence-absence file together with a phylogeny that describes the population structure. See the [tutorial](docs/tutorial.md) before use.
 ### Data preprocessing
 To prepare the inputs for use with BASSGWAS use:
 `prepare_data.R [variant_file.csv] [tree_file.nwk] --odir [OUTPUT_DIRECTORY] [--svd-threshold 0.99] [--af-threshold 0][--to-drop NAMES_TO_DROP.txt]` 
