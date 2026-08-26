@@ -21,6 +21,8 @@ using Random
 Random.seed!(1)
 BLAS.set_num_threads(1)
 
+# Linear algebra tests
+# Use explicit calculations as a ground truth
 let n = 300, d=300, p=10000, alpha = 0.5, beta = 0.3, nu=3.0, lambda=2.0, r=5.0, c=60.0, s=1.0, mc=100.0
 
     K = randn(n,n);
