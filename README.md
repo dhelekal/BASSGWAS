@@ -21,7 +21,7 @@
 BASSGWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a framework for efficient bacterial genome wide association studies (GWAS) which require phenotyping. BASSGWAS combines a sparse whole-genome regression model with Bayesian adaptive experimental design to select batches of isolates from a large, sequenced collection for iterative experimental phenotyping. By incorporating information from past iterations together and the distribution of variants to select isolates for BASSGWAS can achieve substantial reduction in the number of experimental measurements needed to power a GWAS study. See the [preprint](LINK) for benchmarks and details.
 
 ### Workflow diagram
-*BASSGWAS worklow*
+
 <img src='docs/diagram.png' align="center" height="500" />
 
 BASSGWAS is useful when:
