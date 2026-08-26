@@ -300,6 +300,7 @@ us_full_draws = permutedims(reshape(usf_full, ndraws, nchains, :),(1,3,2))
 !isapprox(usf_full[1:ndraws,:], us_full_draws[1:ndraws, :, 1]) && throw(ErrorException("us dont match"))
 
 cchn = Chains(cpars_draws, [:n, :sigma, :r, :c, :icept, :Z])
+println("Tempered distribution diagnostics:")
 show(stdout, "text/plain", describe(cchn)[1])
 println("Saving draws ...")
 
@@ -346,7 +347,7 @@ if batch_sz > 0
     idx_rem = (1:n_samp)[1:n_samp .∉ Ref(idx_obs)]
 
     design = optimize_design(idx_rem, U, S, X, iceptf, betasf, usf_full, Zs, batch_sz; randdes=randdes, idx_fixed=idx_fixed)
-    selected = data[sort([idx_obs; design[1]]), 1]
+    selected = data[sort(design[1]), 1]
 
     println("Design objective value: $(design[2])")
     println("Writing design ...")

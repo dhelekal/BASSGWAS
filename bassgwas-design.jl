@@ -152,7 +152,7 @@ n_samp = size(data[:,1], 1)
 idx_rem = (1:n_samp)[1:n_samp .∉ Ref(idx_obs)]
 
 design = optimize_design(idx_rem, U, S, X, iceptf, betasf, usf, Zs, batch_sz; randdes=false, idx_fixed=idx_fixed)
-selected = data[sort([idx_obs; design[1]]), 1]
+selected = data[sort(design[1]), 1]
 
 println("Design objective value: $(design[2])")
 
