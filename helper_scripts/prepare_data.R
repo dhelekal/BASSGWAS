@@ -23,7 +23,7 @@ af_threshold <- 0.0
 to_drop <- NA_character_
 
 suppressPackageStartupMessages(library(tidyverse))
-library(ape)
+suppressPackageStartupMessages(library(ape))
 
 {
 vars <- vroom::vroom(vfile, show_col_types = FALSE, progress = FALSE, altrep = FALSE)
