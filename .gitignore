@@ -49,3 +49,4 @@ rsconnect/
 .DS_Store
 /docs/gwas_outputs
 /docs/gwas_inputs
+/docs/round*

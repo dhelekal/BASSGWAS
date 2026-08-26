@@ -5,10 +5,15 @@ date: Aug 20, 2026
 output: 
     md_document:
         toc: true
+        toc_depth: 2
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(dpi=300,fig.width=7)
+```
+
 First we load the necessary libraries used in this tutorial
-```{r setup, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE}
 library(ape)
 library(ggtree)
 library(tidyverse)
@@ -17,13 +22,17 @@ library(ggplot2)
 set.seed(1)
 ```
 
-```{bash, warning=FALSE, message=FALSE, error=TRUE}
+```{bash, warning=FALSE, message=FALSE, error=TRUE, eval=FALSE}
+rm -r round0
 rm -r round1
 rm -r round2
 rm -r round3
 rm -r gwas_inputs
 rm -r gwas_outputs
 ```
+
+**NOTICE: RE-RUNNING THIS TUTORIAL REQUIRES AT LEAST 32GB OF RAM AND 4 CPU CORES**
+**EXPECTED EXECUTION TIME: ~45MIN**
 
 # Introduction
 This tutorial assumes that you have previously downloaded the helper & launch scripts in this repository.
@@ -39,7 +48,7 @@ Using BASSGWAS requires two main data files: a variant presence-absence file, an
 Both the phylogeny and variant presence-absence should be constructed for the entire collection at hand. The first column of the variant file should contain unique variant identifiers. 
 The remaining columns should each correspond to an isolate, and the first row contain unique isolate identifiers:
 
-|variant_id|isolate_1|isolate_2|isolate_3| ... |isolate_n|
+|variant   |isolate_1|isolate_2|isolate_3| ... |isolate_n|
 |----------|---------|---------|---------|-----|---------|
 |variant_1 |1        |1        |0        | ... |1        |
 |variant_2 |1        |1        |0        | ... |1        |
@@ -63,41 +72,44 @@ This is especially important when using adaptive sequential sampling. Unitigs ar
 
 ## Inspecting the input data
 The variant file in the toy dataset uses unitigs as variant identifiers and `sra` accession numbers as isolate identifiers.
-```{r show inputs,warning=FALSE}
+```{r show inputs, warning=FALSE}
 vroom::vroom("../sample_data/variants.rtab",
-    altrep=F, progress=F, show_col_types = FALSE) %>%   
-    print(unitigs, n = 5, max_extra_cols = 0,width=60)
+    altrep=F, progress=F, show_col_types=F) %>%   
+    print(n = 5, max_extra_cols = 0,width=60)
 ```
 ## Preparing the inputs
 To generate the input files needed for use BASSGWAS, we will need to use the data preprocessing script.
 First we will create a directory for storing the generated input files.
 
-```{bash, warning=FALSE, message=FALSE, results = 'hide'}
+```{bash, warning=FALSE, message=FALSE, error=TRUE, results = 'hide'}
 mkdir gwas_inputs
 ```
 
 Next we will use the data preprocessing script `prepare_data.R` to process the variant presence-absence file and the phylogeny into BASSGWAS inputs.
 As a part of preprocessing, variant presence absence patterns will be standardised, centred, and deduplicated. The phylogeny is used to compute a factorised, low rank, similarity matrix.
+
+`prepare_data.R` usage:
 ```{bash}
 Rapp ../helper_scripts/prepare_data.R --help
 ```
-The `--af-threshold` can be used to set an optional allele frequency filter. 
+- `--af-threshold` can be used to set an optional allele frequency filter. Variants with frequency lower than this value will be discarded. Default: 0.
+- `--svd_threshold` controls the fraction of variance of the original phylogenetic correlation matrix that will be retained. Default: 0.99.
 
-We will now use the script to preprocess the toy data.
-```{bash, warning=FALSE, message=FALSE, results = 'hide'}
-Rapp ../helper_scripts/prepare_data.R ../sample_data/variants.rtab ../sample_data/tree.tre --odir gwas_inputs
+We will now use the script to preprocess the toy data. To speed up inference for the purposes of this tutorial, we will retain only 90% of the variance
+```{bash, warning=FALSE, message=FALSE}
+Rapp ../helper_scripts/prepare_data.R ../sample_data/variants.rtab ../sample_data/tree.tre --odir gwas_inputs --svd_threshold 0.9
 ```
 This generated input files in the `gwas_inputs` directory. 
 The following two files are subsequently used with BASSGWASS:
 
 - `patterns_centred.csv` a centred, minorized, and deduplicated variant presence absence file for use with BASSGWAS.
 
-- `U.csv` & `S.csv` a low factorisation of the correlation matrix implied by the phylogeny for use with BASSGWAS.
+- `U.csv` & `S.csv` a low-rank factorisation of the correlation matrix implied by the phylogeny for use with BASSGWAS.
  
 The `vars2patts.csv` file maps between the original variant identifiers and the deduplicated variants that form `patterns_centred.csv`:
 ```{r show variant map,warning=FALSE}
 vroom::vroom("gwas_inputs/vars2patts.csv",
-    altrep=F, progress=F, show_col_types = FALSE) %>%   
+    altrep=F, progress=F, show_col_types=F) %>%   
     print(unitigs, n = 4, max_extra_cols = 0,width=60)
 ```
 
@@ -109,8 +121,8 @@ vroom::vroom("gwas_inputs/vars2patts.csv",
 
 Additionally an uncentred, binary version of the pattern file was generated as `patterns.csv`.
 
-## GWAS
-### `bassgwass-run.jl` usage
+# GWAS
+## `bassgwass-run.jl` usage
 ```
 bassgwas-run.jl --pfile PFILE --ufile UFILE --sfile SFILE
                 --obsfile OBSFILE --odir ODIR --batchsz BATCHSZ
@@ -119,13 +131,14 @@ bassgwas-run.jl --pfile PFILE --ufile UFILE --sfile SFILE
                 [--nchains NCHAINS] [--p_mean P_MEAN]
                 [--pr_0 PR_0] [--randdes] [-h]
 ```
-###
 
 - `--pfile` `patterns_centred.csv` variant file
 
 - `--ufile` `U.csv` left singular vectors for population structure correction
 
 - `--sfile` `S.csv` singular values for population structure correction
+
+- `--obsfile` observations file
 
 - `--odir` output directory
 
@@ -150,16 +163,21 @@ bassgwas-run.jl --pfile PFILE --ufile UFILE --sfile SFILE
 - `-h --help` print help and exit. 
 
 With the inputs ready, we can now run the GWAS model. 
-BASSGWAS uses efficient MCMC sampling and will create multiple files with MCMC draws when finished, 
-along with a file specifying a batch of isolates for subsequent phenotyping if requested.
+BASSGWAS uses efficient MCMC importance sampling and will create multiple files with MCMC draws when finished, together with a file specifying a batch of isolates for subsequent phenotyping if requested.
 
 **NOTE the generated files are large. For 100k variants, 4000 draws require approximately 60GB of storage**
 
-### Running GWAS on the toy dataset
-We will now demonstrate GWAS functionality on the toy dataset. We will run 2 chains in parallel each for a total of $250\times 500$ iterations. Moreover we will parallelize each chain across 2 CPU cores using `julia -t2`. To speed things up, we will downsample the full dataset to 200 isolates.
+## Running GWAS on a toy dataset
+We will now demonstrate GWAS functionality on the toy dataset. 
+The trait in this dataset is high-level ($\geq 1\mu g\,mL^{-1}$) ciprofloxacin resistance in _N. gonnorhea_.
+To attain this level of resistance, at least one substitution in each of _gyrA_ and _parC_ genes is required. 
+The polygenic nature of this trait makes it challenging for GWAS with binary phenotypes.
+We will run 2 chains in parallel each for a total of $250\times 500$ iterations. 
+Moreover we will parallelize each chain across 2 CPU cores using `julia -t2`. 
+To speed things up, we will downsample the full dataset to 200 isolates.
 
 ```{r downsample data, warning=FALSE, message=FALSE}
-dat_small <- read_csv("../sample_data/data_bin.csv") %>% 
+dat_small <- read_csv("../sample_data/data_full.csv", progress=F, show_col_types=F) %>% 
     slice_sample(n = 200)
 dat_small %>% group_by(cip) %>% 
     summarise(count=n())
@@ -167,20 +185,368 @@ dat_small %>% group_by(cip) %>%
 dat_small %>% write_csv("gwas_inputs/data200.csv")
 ```
 
-We're now ready to run BASSGWAS. As the toy dataset only contains 10000 variants, this should only take a few minutes.
-```{bash, warning=FALSE, message=FALSE}
+Inspect observations
+```{r}
+print(dat_small, n = 5, max_extra_cols = 0, width=60)
+```
+
+We're now ready to run BASSGWAS sampling. As the toy dataset only contains 10000 variants, this should only take a few minutes.
+```{bash, warning=FALSE, message=FALSE, eval=FALSE}
 mkdir gwas_outputs
 julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile gwas_inputs/data200.csv --odir gwas_outputs --batchsz 0 --ndraws 500 --nthin 250 --nchains 2
 ```
 
-When using BASSGWAS with real data using up to 4 threads per chain is recommended. It's a good idea to aim for at least 250 samples per chain.
+When using BASSGWAS with real data using up to 4 threads per chain is recommended. We recommend running chains for  $500\times 1000$ iterations.
 
-### Identifying associations 
+## Identifying associations 
+BASSGWAS uses a Bayesian sparse whole-genome regression model. The combined effect $\psi$ of all variants on the $j$-th strain is modelled as:
 
-When using BASSGWAS with real data using up to 4 threads per chain is recommended.
+$$\psi_j = X_j\pmb{\beta} + u_j+\mu$$
 
-## Adaptive experimental design
+Here $\pmb{\beta}$ is a vector of variant effects, $u_j$ is a random effect that accounts for population structure, and $\mu$ is an intercept. Bayesian sparse models ensure that all but a few of the entries of $\pmb{\beta}$ are zero, i.e. that all but a few variants have no effect. 
 
+To identify association we will use *posterior inclusion probabilties* (PIPs). A PIP is the probability that a variant has a non-zero effect given the observed data. PIPs can be extended to *groups of variants* in the sense of the probability that a group contains *at least* one variant with an effect given the observed data. This can be useful for example if we group variants by genomic position or by gene annotation.
 
+We can interpret PIPs as probabilities of a variant, or a group of variants containing a causal effect.
 
+BASSGWAS saved the posterior draws into the `gwas_outputs` directory:
+```{bash, warning=FALSE, message=FALSE}
+ls gwas_outputs
+```
 
+- `b_draws.csv` variant coefficient draws
+
+- `gamma_draws.csv` variant inclusion indicator draws
+
+- `par_draws.csv` hyperparameter, summary statistic, and importance weight draws
+
+- `pip_draws.csv` variant PIP draws
+
+- `u_draws.csv` lineage effect draws
+
+- `Y_draws.csv` latent utility draws for observed isolates
+
+We will use the `comp_group_pips.R` script to identify associated loci.
+
+`comp_group_pips.R` usage:
+```{bash}
+Rapp ../helper_scripts/comp_group_pips.R --help
+```
+
+`comp_group_pips.R` computes PIPs for groupings of variants specified in the variant group file.
+The variant group file should list group-variant pairs:
+
+|variant   |group|
+|----------|---------|
+|variant_1 |group1   |
+|variant_1 |group2   |
+|variant_2 |group4   |
+|variant_3 |group2   |
+|variant_3 |group3   |
+|... |...        |
+|variant_n |group_k  |
+
+The toy dataset contains two variant grouping files:
+ 
+ - `locus_groups.R` which groups unitigs by annotations of the loci they map
+ - `position_groups.R` which groups unitigs by 250bp overlapping windows spaced 125bp apart.
+
+```{r}
+vroom::vroom("../sample_data/position_groups.csv",
+    altrep=F, progress=F, show_col_types=F) %>%   
+    print(n = 5, max_extra_cols = 0, width=60)
+```
+
+### Using Manhattan plots 
+
+We can use the position grouping, together with the posterior draws to calculate the PIPs for individual genomic positions along the chromosome.
+
+```{bash, warning=FALSE, message=FALSE}
+Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv gwas_outputs/position_pips.csv gwas_outputs/par_draws.csv gwas_outputs/gamma_draws.csv gwas_inputs/vars2patts.csv
+```
+
+In turn, position PIPs can be visualised as a manhattan plot:
+
+```{r}
+parC_begin <- 194768
+parC_end <- 197071
+parC_pos <- parC_begin+(parC_end-parC_begin)/2
+
+gyrA_begin <- 996474
+gyrA_end <- 999224
+gyrA_pos <- gyrA_begin+(gyrA_end-gyrA_begin)/2
+```
+
+```{r, fig.dim = c(8, 2),dpi=300}
+read_csv("gwas_outputs/position_pips.csv", progress=F, show_col_types=F) %>% 
+    ggplot(aes(x=group/1e3, y=PIP)) + 
+        geom_col(fill="gray25",color="gray25") +
+        geom_vline(data=data.frame(x=c(parC_pos,gyrA_pos)/1e3), aes(xintercept=x), 
+            color="darkred", linetype="dashed", alpha=.5, linewidth=1) +
+        ylim(0,1)+
+        labs(y="PIP", x="Position (KB)")
+```
+
+### Using variant annotations
+
+Alternatively we can use the locus grouping to identify associated loci while limiting reference bias
+```{bash, warning=FALSE, message=FALSE}
+Rapp ../helper_scripts/comp_group_pips.R ../sample_data/locus_groups.csv gwas_outputs/locus_pips.csv gwas_outputs/par_draws.csv gwas_outputs/gamma_draws.csv gwas_inputs/vars2patts.csv
+```
+
+```{r}
+read_csv("gwas_outputs/locus_pips.csv", progress=F, show_col_types=F) %>% 
+    arrange(-PIP) %>% 
+    print(n = 5, max_extra_cols = 0, width=60)
+```
+
+Based on these two summaries we can see that there are two peaks at the _gyrA_ and _parC_ loci, 
+substitutions in both of which are required to attain high-level ciprofloxacin resistance. 
+
+While _gyrA_ was idenitified with a relatively high-level of confidence ($PIP > 0.7$), 
+the confidence for the _parC_ hit remains low ($PIP < 0.45$). This is a consequence of random sampling.
+Relying on hits with low PIPs can still lead to successful identification of causative variants but it will increase false positive rates, 
+in turn leading to failed validation experiments. 
+
+### Refining associated variants
+
+We can further _fine-map_ the _gyrA_ hit to identify which variants are most likely to be causal. 
+First we will compute the per-unitig PIPs.
+```{bash, warning=FALSE, message=FALSE}
+Rapp ../helper_scripts/comp_variant_pips.R gwas_outputs/variant_pips.csv gwas_outputs/par_draws.csv gwas_outputs/pip_draws.csv gwas_inputs/vars2patts.csv
+```
+
+Then we will use the variant annotation file to identify variants mapping to _parC_ and display 
+the top 5.
+```{r}
+parC_hits <- read_csv("../sample_data/annotated_hits.csv", progress=F, show_col_types=F) %>% 
+    filter(locus=="parC") %>%
+    left_join(
+        read_csv("gwas_outputs/variant_pips.csv", progress=F, show_col_types=F),
+        by="variant")
+        
+parC_hits %>% 
+    arrange(-PIP) %>% 
+    print(n = 10, max_extra_cols = 0,width=60)
+```
+
+# Adaptive experimental design
+As we saw above, even with 200 samples chosen at random, we were not able to identify _gyrA_ with reasonable confidence.
+Instead, we will now conduct a synthetic experiment using adaptive sampling functionality
+
+## Setup
+We will begin by subsetting the 200 isolates we used in the previous example to just 4, keeping at least one susceptible and one resistant isolate.
+```{bash, warning=FALSE, message=FALSE, error=TRUE, results = 'hide'}
+mkdir round0
+```
+```{r}
+pheno_small <- dat_small$cip
+idx1 <- sample(which(pheno_small), 1) 
+idx0 <- sample(which(!pheno_small), 1) 
+rem <- sample(c(1:length(pheno_small))[-c(idx1,idx0)], 4-2,replace=F)
+
+to_keep <- c(idx0, idx1, rem)
+write_csv(dat_small[to_keep,], "round0/data.csv")
+```
+
+## Adaptive design 
+We will run BASS-GWAS adaptive design using a batch size of 16 for 4 rounds.
+
+### Round 0
+```{bash, warning=FALSE, message=FALSE, eval=FALSE}
+julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round0/data.csv --odir round0 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
+```
+
+### Round 1
+Create an output directory for round 2 and append the entries for the selected isolates
+```{bash, warning=FALSE, message=FALSE, eval=FALSE}
+mkdir round1
+cp round0/data.csv round1/data.csv
+grep -wf round0/design.txt ../sample_data/data_full.csv >> round1/data.csv
+```
+Run BASS-GWAS
+```{bash, warning=FALSE, message=FALSE, eval=FALSE}
+julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round1/data.csv --odir round1 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
+```
+Compute position PIPS
+```{bash, warning=FALSE, message=FALSE}
+Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv round1/position_pips.csv round1/par_draws.csv round1/gamma_draws.csv gwas_inputs/vars2patts.csv
+```
+Manhattan plot for round 1:
+```{r, fig.dim = c(8, 2),dpi=300}
+read_csv("round1/position_pips.csv", progress=F, show_col_types=F) %>% 
+    ggplot(aes(x=group/1e3, y=PIP)) + 
+        geom_col(fill="gray25",color="gray25") +
+        geom_vline(data=data.frame(x=c(parC_pos,gyrA_pos)/1e3), aes(xintercept=x), 
+            color="darkred", linetype="dashed", alpha=.5, linewidth=1) +
+        ylim(0,1)+
+        labs(y="PIP", x="Position (KB)")
+```
+
+### Round 2
+Create an output directory for round 3 and append the entries for the selected isolates
+```{bash, warning=FALSE, message=FALSE, class.source = 'fold-hide', eval=FALSE}
+mkdir round2
+cp round1/data.csv round2/data.csv
+grep -wf round1/design.txt ../sample_data/data_full.csv >> round2/data.csv
+```
+Run BASS-GWAS
+```{bash, warning=FALSE, message=FALSE, class.source = 'fold-hide', eval=FALSE}
+julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round2/data.csv --odir round2 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
+```
+Compute position PIPS
+```{bash, warning=FALSE, class.source = 'fold-hide', message=FALSE}
+Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv round2/position_pips.csv round2/par_draws.csv round2/gamma_draws.csv gwas_inputs/vars2patts.csv
+```
+Manhattan plot for round 2:
+```{r, fig.dim = c(8, 2),dpi=300}
+read_csv("round2/position_pips.csv", progress=F, show_col_types=F) %>% 
+    ggplot(aes(x=group/1e3, y=PIP)) + 
+        geom_col(fill="gray25",color="gray25") +
+        geom_vline(data=data.frame(x=c(parC_pos,gyrA_pos)/1e3), aes(xintercept=x), 
+            color="darkred", linetype="dashed", alpha=.5, linewidth=1) +
+        ylim(0,1)+
+        labs(y="PIP", x="Position (KB)")
+```
+
+### Round 3
+Create an output directory for round 3 and append the entries for the selected isolates
+```{bash, warning=FALSE, message=FALSE, class.source = 'fold-hide', eval=FALSE}
+mkdir round3
+cp round2/data.csv round3/data.csv
+grep -wf round2/design.txt ../sample_data/data_full.csv >> round3/data.csv
+```
+Run BASS-GWAS
+```{bash, warning=FALSE, message=FALSE, class.source = 'fold-hide', eval=FALSE}
+julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round3/data.csv --odir round3 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
+```
+Compute position PIPS
+```{bash, warning=FALSE, class.source = 'fold-hide', message=FALSE}
+Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv round3/position_pips.csv round3/par_draws.csv round3/gamma_draws.csv gwas_inputs/vars2patts.csv
+```
+Manhattan plot for round 3:
+```{r, fig.dim = c(8, 2),dpi=300}
+read_csv("round3/position_pips.csv", progress=F, show_col_types=F) %>% 
+    ggplot(aes(x=group/1e3, y=PIP)) + 
+        geom_col(fill="gray25",color="gray25") +
+        geom_vline(data=data.frame(x=c(parC_pos,gyrA_pos)/1e3), aes(xintercept=x), 
+            color="darkred", linetype="dashed", alpha=.5, linewidth=1) +
+        ylim(0,1)+
+        labs(y="PIP", x="Position (KB)")
+```
+
+### Round 4
+Create an output directory for round 4 and append the entries for the selected isolates
+```{bash, warning=FALSE, message=FALSE, class.source = 'fold-hide', eval=FALSE}
+mkdir round4
+cp round3/data.csv round4/data.csv
+grep -wf round3/design.txt ../sample_data/data_full.csv >> round4/data.csv
+```
+Run BASS-GWAS
+```{bash, warning=FALSE, message=FALSE, class.source = 'fold-hide', eval=FALSE}
+julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round4/data.csv --odir round4 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
+```
+Compute position PIPS
+```{bash, warning=FALSE, class.source = 'fold-hide', class.source = 'foldable', message=FALSE}
+Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv round4/position_pips.csv round4/par_draws.csv round4/gamma_draws.csv gwas_inputs/vars2patts.csv
+```
+Manhattan plot for round 4:
+```{r, fig.dim = c(8, 2),dpi=300}
+read_csv("round4/position_pips.csv", progress=F, show_col_types=F) %>% 
+    ggplot(aes(x=group/1e3, y=PIP)) + 
+        geom_col(fill="gray25",color="gray25") +
+        geom_vline(data=data.frame(x=c(parC_pos,gyrA_pos)/1e3), aes(xintercept=x), 
+            color="darkred", linetype="dashed", alpha=.5, linewidth=1) +
+        ylim(0,1)+
+        labs(y="PIP", x="Position (KB)")
+```
+After round 4, representing a total of 68 (64 + 4) isolates both causal loci,  _parC_ and _gyrA_, were identified with high confidence ($PIP > 0.9$). 
+Lets see if the the unitig-level PIPs are now more precise.
+
+Compute the per-unitig PIPs.
+```{bash, warning=FALSE, message=FALSE}
+Rapp ../helper_scripts/comp_variant_pips.R round4/variant_pips.csv round4/par_draws.csv round4/pip_draws.csv gwas_inputs/vars2patts.csv
+```
+
+Inspect _parC_ variants
+```{r}
+read_csv("../sample_data/annotated_hits.csv", progress=F, show_col_types=F) %>% 
+    filter(locus=="parC" ) %>%
+    left_join(
+        read_csv("round4/variant_pips.csv", progress=F, show_col_types=F),
+        by="variant")%>% 
+    arrange(-PIP) %>% 
+    print(n = 5, max_extra_cols = 0,width=60)
+        
+```
+The variants mapping to _parC_ are dominated by a single strongly unitig mapping to the QRDR region. 
+This is in contrast to random sampling where the individual variant mapping was much less precise.
+
+Inspect _gyrA_ variants
+```{r}
+read_csv("../sample_data/annotated_hits.csv", progress=F, show_col_types=F) %>% 
+    filter(locus=="gyrA" ) %>%
+    left_join(
+        read_csv("round4/variant_pips.csv", progress=F, show_col_types=F),
+        by="variant")%>% 
+    arrange(-PIP) %>% 
+    print(n = 5, max_extra_cols = 0,width=60)
+        
+```
+The variants mapping to _gyrA_ are dominated by a handful of strongly associated variants all mapping to the QRDR region.
+
+In both cases adaptive design greatly improved efficiency over random sampling.
+## Additional functionality
+BASS-GWAS provides additional functionality that may be useful in real-world experimental applications
+### Re-using draws to redesign an experiment
+`bassgwas-design.jl` allows for experimental design to be optimized using a previous MCMC run.
+
+```
+bassgwas-design.jl --pfile PFILE --ufile UFILE --sfile SFILE
+                        --obsfile OBSFILE --b_draws B_DRAWS
+                        --u_draws U_DRAWS --par_draws PAR_DRAWS
+                        --ofile OFILE --batchsz BATCHSZ
+                        [--inclnext INCLNEXT]
+```
+- `--pfile` `patterns_centred.csv` variant file
+
+- `--ufile` `U.csv` left singular vectors for population structure correction
+
+- `--sfile` `S.csv` singular values for population structure correction
+
+- `--obsfile` observations file
+
+- `--b_draws` `b_draws.csv` variant coefficient draws
+
+- `--u_draws` `u_draws.csv` lineage effect draws
+
+- `--par_draws` `par_draws.csv` hyperparameter, summary statistic, and importance weight draws
+
+- `--ofile` output file name
+
+- `--batchsz` batch size for experimental design. If set to 0, experimental design will be disabled
+
+- `--inclnext` path to a file listing isolate identifiers to include in the next experimental designs, one per line
+
+- `-h --help` print help and exit. 
+
+### Including fixed isolates in design 
+The `--inclnext` argument can be uses to pass a text file listing isolate identifiers to include in the design. One per line.
+
+### Removing problematic isolates from the collection
+During experimental design, problematic or non-viable isolates may be encountered.
+To do drop problematic isolates, we can generate new GWAS inputs using the original variant and tree file, and pass a list of isolate identifiers to exclude to `prepare_data.R`, one identifier per line.
+
+```
+prepare_data.R --to_drop identifiers_to_drop.txt
+```
+
+# Tips
+
+- Ensure that only high quality isolates are included in experimental design collections. Mislabeled or contaminated isolates may severely compromise BASS-GWAS functionality.
+
+- Use experimental controls to reduce phenotyping noise 
+
+- Set the allele frequency filter to a reasonable value. $af=10/N$ where N is the collection size is a good starting value.
+
+- When applying BASS-GWAS to a new collection or a new organism, run synthetic experiments using known genotype/phenotype relationships to ensure proper data preparation.
