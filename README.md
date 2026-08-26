@@ -1,4 +1,4 @@
-# **B**ayesian **A**daptive **S**equential **S**ampling for (bacterial)**GWAS**
+# **B**ayesian **A**daptive **S**equential **S**ampling for (bacterial) **GWAS**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GNU_GPL_v3-blue)](https://github.com/dhelekal/BASSGWAS/blob/main/LICENSE)   
 
@@ -34,17 +34,24 @@ Additionally, the underlying sparse regression model can be used for finemapping
 
 ## Installation
 See the [tutorial](docs/tutorial.md) before use.
+
 ### Required dependencies
 The BASSGWAS package requires `julia>=1.11`. 
+
 ### Helper script dependencies
 The scripts in the `helper_scripts` directory require a working `R` installation together with the following packages:
 - `Rapp`
 - `tidyverse`
 - `ape`
+
 ### Package installation
-Usen the `julia` package manager to install BASSGWAS from `github`: `] add https://github.com/dhelekal/BASSGWAS.git:BASSGWAS`
+Use the `julia` package manager to install BASSGWAS from `github`:
+
+```using Pkg; Pkg.add("https://github.com/dhelekal/BASSGWAS.git:BASSGWAS")```
+
 ## Usage
 Using BASSGWAS requires a variant presence-absence file together with a phylogeny that describes the population structure. **See the [tutorial](docs/tutorial.md) before use**.
+
 ### Data preprocessing
 To prepare the inputs for use with BASSGWAS use:
 
