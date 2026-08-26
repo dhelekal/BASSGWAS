@@ -22,7 +22,7 @@ gammas_draws <- NULL
 #| required: true
 vars2patts <- NULL
 
-library(tidyverse)
+suppressPackageStartupMessages(library(tidyverse))
 Sys.setenv(VROOM_CONNECTION_SIZE = 1500072)
 
 pars <- vroom::vroom(par_draws, show_col_types = FALSE, progress = FALSE, altrep = FALSE)
@@ -35,8 +35,9 @@ gammas <- gammas[,3:ncol(gammas)] > 0
 stopifnot(nrow(gammas)==nr)
 
 variants <-vroom::vroom(vars2patts,show_col_types = FALSE, progress = FALSE, altrep = FALSE)
-groups <- vroom::vroom(gfile) %>% 
-	left_join(variants) %>%
+groups <- vroom::vroom(gfile, col_types = c(variant="c", group="c"), 
+	show_col_types = FALSE, progress = FALSE, altrep = FALSE) %>% 
+	left_join(variants, by="variant") %>%
 	select(pattern_id, group) %>%
 	group_by(pattern_id, group) %>%
 	distinct %>%

@@ -17,7 +17,7 @@ out <- ""
 #| description: working directory
 dir <- "."
 
-library(tidyverse)
+suppressPackageStartupMessages(library(tidyverse))
 
 seqs <- read_csv(vfile)
 

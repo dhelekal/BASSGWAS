@@ -22,7 +22,7 @@ af_threshold <- 0.0
 #| required: false
 to_drop <- NA_character_
 
-library(tidyverse)
+suppressPackageStartupMessages(library(tidyverse))
 library(ape)
 
 {

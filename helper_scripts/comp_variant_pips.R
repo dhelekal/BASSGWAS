@@ -18,7 +18,7 @@ pip_draws <- NULL
 #| required: true
 vars2patts <- NULL
 
-library(tidyverse)
+suppressPackageStartupMessages(library(tidyverse))
 Sys.setenv(VROOM_CONNECTION_SIZE = 1500072)
 
 pars <- vroom::vroom(par_draws, show_col_types = FALSE, progress = FALSE, altrep = FALSE)
