@@ -10,7 +10,6 @@
 -   [Adaptive experimental design](#adaptive-experimental-design)
     -   [Setup](#setup)
     -   [Adaptive design](#adaptive-design)
-    -   [Additional functionality](#additional-functionality)
 -   [Tips](#tips)
 
 First we load the necessary libraries used in this tutorial
@@ -26,6 +25,7 @@ First we load the necessary libraries used in this tutorial
     rm -r round1
     rm -r round2
     rm -r round3
+    rm -r round4
     rm -r gwas_inputs
     rm -r gwas_outputs
 
@@ -205,15 +205,6 @@ the variance
     ## The following object is masked from ‘package:dplyr’:
     ## 
     ##     where
-    ## 
-    ## Rows: 26286 Columns: 801
-    ## ── Column specification ────────────────────────────────────────────────────────
-    ## Delimiter: " "
-    ## chr   (1): Unitig_sequence
-    ## dbl (800): SRR11698195, SRR11698198, SRR11698231, SRR11698239, SRR11698255, ...
-    ## 
-    ## ℹ Use `spec()` to retrieve the full column specification for this data.
-    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
 
 This generated input files in the `gwas_inputs` directory. The following
 two files are subsequently used with BASSGWASS:
@@ -781,15 +772,15 @@ Inspect *gyrA* variants
     ## 5 ACCACCCCCACG… WHO_N  gyrA  996727 996782       9393 0.0315
     ## # ℹ 212 more rows
 
-The variants mapping to *gyrA*, are dominated by strongly associated
-variants mapping to the QRDR region.
+The variants mapping to *gyrA* are dominated by a handful of strongly
+associated variants all mapping to the QRDR region.
 
-## Additional functionality
-
-BASS-GWAS provides additional functionality that may be useful in
-real-world experimental applications \### Re-using draws to redesign an
-experiment `bassgwas-design.jl` allows for experimental design to be
-optimized using a previous MCMC run.
+In both cases adaptive design greatly improved efficiency over random
+sampling. \## Additional functionality BASS-GWAS provides additional
+functionality that may be useful in real-world experimental applications
+\### Re-using draws to redesign an experiment `bassgwas-design.jl`
+allows for experimental design to be optimized using a previous MCMC
+run.
 
     bassgwas-design.jl --pfile PFILE --ufile UFILE --sfile SFILE
                             --obsfile OBSFILE --b_draws B_DRAWS

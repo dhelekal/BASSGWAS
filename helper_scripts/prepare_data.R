@@ -26,7 +26,7 @@ suppressPackageStartupMessages(library(tidyverse))
 library(ape)
 
 {
-vars <- vroom::vroom(vfile)
+vars <- vroom::vroom(vfile, show_col_types = FALSE, progress = FALSE, altrep = FALSE)
 phylo <- read.tree(tfile)
 
 colnames(vars) <- c("variant_id", colnames(vars)[-1])

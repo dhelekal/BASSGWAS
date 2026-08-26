@@ -27,6 +27,7 @@ rm -r round0
 rm -r round1
 rm -r round2
 rm -r round3
+rm -r round4
 rm -r gwas_inputs
 rm -r gwas_outputs
 ```
