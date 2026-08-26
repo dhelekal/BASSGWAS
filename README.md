@@ -46,6 +46,7 @@ The scripts in the `helper_scripts` directory require a working `R` installation
 
 ### Package installation
 Use the `julia` package manager to install BASSGWAS from `github`:
+
 ```using Pkg; Pkg.add("https://github.com/dhelekal/BASSGWAS.git:BASSGWAS")```
 
 ## Usage
