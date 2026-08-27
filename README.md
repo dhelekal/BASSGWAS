@@ -26,7 +26,7 @@
 
 
 ## Introduction
-BASSGWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a framework for efficient bacterial genome wide association studies (GWAS) which require phenotyping. BASSGWAS combines a sparse whole-genome regression model with Bayesian adaptive experimental design to select batches of isolates from a large, sequenced collection for iterative experimental phenotyping. By incorporating information from past iterations together and the distribution of variants to select isolates for BASSGWAS can achieve substantial reduction in the number of experimental measurements needed to power a GWAS study. See the [preprint](LINK) for benchmarks and details.
+BASSGWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a framework for efficient bacterial genome-wide association studies (GWAS) that require phenotyping. BASSGWAS combines a sparse whole-genome regression model with Bayesian adaptive experimental design to select batches of isolates from a large, sequenced collection for iterative experimental phenotyping. By incorporating information from past iterations and the distribution of variants to select isolates for phenotyping, BASSGWAS can substantially reduce the number of experimental measurements needed to power a GWAS study. See the [preprint](LINK) for benchmarks and details.
 
 ### Workflow diagram
 
@@ -38,7 +38,7 @@ BASSGWAS is useful when:
 3. You need to do phenotyping yourself.
 4. You have access to a large sequenced collection of (at least several hundred) isolates you can phenotype.
 
-Additionally, the underlying sparse regression model can be used for finemapping **independent of experimental design functionality**. Currently, only binary phenotypes are supported. 
+Additionally, the underlying sparse regression model can be used for fine-mapping **independent of experimental design functionality**. Currently, only binary phenotypes are supported. 
 
 ## Installation
 See the [tutorial](docs/tutorial.md) before use.
@@ -74,7 +74,7 @@ To run GWAS use:
 
 `julia bassgwas-run.jl --pfile [patterns_centred.csv] --ufile [U.csv] --sfile [S.csv] --obsfile [obs.csv] --odir [OUTPUT_DIRECTORY] --batchsz [BATCH_SIZE] [--inclnext INCLNEXT.txt] [--seed 0] [--ndraws 1000] [--nthin 500] [--nchains 1] [--p_mean 5.0] [--pr_0 0.25] [--randdes]`.
 
-This will write posterior draws and the experimental design to the output directory. Setting `--batchsz 0` will disable experimental design and run gwas only.
+This will write posterior draws and the experimental design to the output directory. Setting `--batchsz 0` will disable experimental design and run GWAS only.
 
 ### Experimental design
 Experimental design can be enabled by setting the batch size argument in `bassgwas-run.jl` argument to a non-zero value. Alternatively, experimental design can be run standalone, using posterior draws from a prior GWAS run:
