@@ -1,4 +1,4 @@
-using BADBwGS: ParState2, 
+using BASSGWAS: ParState2, 
     makeSCache, 
     TDistLogLik, 
     init_state2, 
