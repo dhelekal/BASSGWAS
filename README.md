@@ -1,9 +1,16 @@
-# BASS-GWAS <img src='docs/lefishe.png' align="right" height="300" />
+# BASS-GWAS <img style="z-index: 999999;" src='docs/lefishe.png' align="right" height="300"/>
 **B**ayesian **A**daptive **S**equential **S**ampling for (bacterial) **GWAS**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GNU_GPL_v3-blue)](https://github.com/dhelekal/BASSGWAS/blob/main/LICENSE)   
 
-## Contents
+<div id="toc"> <!-- both work, toc or user-content-toc -->
+  <ul style="list-style: none;">
+    <summary>
+      <h2><b>Contents</b></h2>
+    </summary>
+  </ul>
+</div>
+
   * [Introduction](#introduction)
   * [Installation](#installation)
     * [Required dependencies](#required-dependencies)
@@ -13,7 +20,7 @@
       * [Data preprocessing](#data-preprocessing)
       * [GWAS](#gwas)
       * [Experimental Design](#experimental-design)
-  * [Feedback/Issues/Help](#feedback/issues/help)
+  * [Feedback/Issues/Help](#feedbackissueshelp)
   * [License](#license)
   * [Citation](#citation)
 
