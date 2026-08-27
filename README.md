@@ -47,7 +47,7 @@ The scripts in the `helper_scripts` directory require a working `R` installation
 ### Package installation
 Use the `julia` package manager to install BASSGWAS from `github`:
 
-```using Pkg; Pkg.add("https://github.com/dhelekal/BASSGWAS.git:BASSGWAS")```
+```using Pkg; Pkg.add(url="https://github.com/dhelekal/BASSGWAS", subdir="BASSGWAS")```
 
 ## Usage
 Using BASSGWAS requires a variant presence-absence file together with a phylogeny that describes the population structure. **See the [tutorial](docs/tutorial.md) before use**.
