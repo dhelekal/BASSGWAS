@@ -25,7 +25,6 @@ rm -r gwas_outputs
 First we load the necessary libraries used in this tutorial
 ```{r, warning=FALSE, message=FALSE}
 library(ape)
-library(ggtree)
 library(tidyverse)
 library(ggplot2)
 
