@@ -54,12 +54,6 @@ function add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
     m2 = size(qc.XtXb, 1)
     n2 = size(qc.XtXb, 2)
 
-    #@views qc.XtX[1:(i1_new-1), 1:(i0_old-1)] .= qc.XtXb[1:(i1_new-1), 1:(i0_old-1)]
-    #@views qc.XtX[(i1_new+1):m1, 1:(i0_old-1)] .= qc.XtXb[i1_new:m2, 1:(i0_old-1)]
-
-    #@views qc.XtX[1:(i1_new-1), i0_old:n1] .= qc.XtXb[1:(i1_new-1), (i0_old+1):n2]
-    #@views qc.XtX[(i1_new+1):m1, i0_old:n1] .= qc.XtXb[i1_new:m2, (i0_old+1):n2]
-
     copyto!(qc.XtX, 1:(i1_new-1), 1:(i0_old-1), qc.XtXb, 1:(i1_new-1), 1:(i0_old-1))
     copyto!(qc.XtX, (i1_new+1):m1, 1:(i0_old-1), qc.XtXb, i1_new:m2, 1:(i0_old-1))
     copyto!(qc.XtX, 1:(i1_new-1), i0_old:n1, qc.XtXb, 1:(i1_new-1), (i0_old+1):n2)
@@ -95,17 +89,10 @@ function remove_active_QC(qc, ps, index, i1_set_new, i0_set_new)
     m2 = size(qc.XtXb, 1)
     n2 = size(qc.XtXb, 2)
 
-    #@views qc.XtX[1:(i1_old-1), 1:(i0_new-1)] .= qc.XtXb[1:(i1_old-1), 1:(i0_new-1)]
-    #@views qc.XtX[i1_old:m1, 1:(i0_new-1)] .= qc.XtXb[(i1_old+1):m2, 1:(i0_new-1)]
-
-    #@views qc.XtX[1:(i1_old-1), (i0_new+1):n1] .= qc.XtXb[1:(i1_old-1), i0_new:n2]
-    #@views qc.XtX[i1_old:m1, (i0_new+1):n1] .= qc.XtXb[(i1_old+1):m2, i0_new:n2]
-
     copyto!(qc.XtX, 1:(i1_old-1), 1:(i0_new-1), qc.XtXb, 1:(i1_old-1), 1:(i0_new-1))
     copyto!(qc.XtX, i1_old:m1, 1:(i0_new-1), qc.XtXb, (i1_old+1):m2, 1:(i0_new-1))
     copyto!(qc.XtX, 1:(i1_old-1), (i0_new+1):n1, qc.XtXb, 1:(i1_old-1), i0_new:n2)
     copyto!(qc.XtX, i1_old:m1, (i0_new+1):n1, qc.XtXb, (i1_old+1):m2, i0_new:n2)
-
 
     qc.X1 = X[:, i1_set_new]
     @views qc.XtX[:, i0_new] .= qc.X1' * X[:, index]
