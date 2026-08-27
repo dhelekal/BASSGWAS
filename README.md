@@ -38,6 +38,8 @@ See the [tutorial](docs/tutorial.md) before use.
 ### Required dependencies
 The BASSGWAS package requires `julia>=1.11`. 
 
+See the official [julia](https://julialang.org/) website for installation instructions.
+
 ### Helper script dependencies
 The scripts in the `helper_scripts` directory require a working `R` installation together with the following packages:
 - `Rapp`
