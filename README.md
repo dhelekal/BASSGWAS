@@ -1,4 +1,5 @@
-# **B**ayesian **A**daptive **S**equential **S**ampling for (bacterial) **GWAS**
+# BASS-GWAS <img src='docs/lefishe.png' align="right" height="300" />
+**B**ayesian **A**daptive **S**equential **S**ampling for (bacterial) **GWAS**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GNU_GPL_v3-blue)](https://github.com/dhelekal/BASSGWAS/blob/main/LICENSE)   
 
