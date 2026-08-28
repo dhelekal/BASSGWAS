@@ -57,18 +57,18 @@ The remaining columns should each correspond to an isolate, and the first row co
 |... |...        |...        |...        | ... |...      |
 |variant_n |0        |0        |1        | ... |0        |
 
-The isolate indentifiers must be shared between the variant file and the phylogeny. 
+The isolate identifiers must be shared between the variant file and the phylogeny. 
 If using unitigs, [unitig-caller](https://github.com/bacpop/unitig-caller) can create this file for you.
 
 ## Note on Input Types
 Representing genetic variation in bacterial populations is an active area of research.
-There are many distinct approaches, for example using VCFs, unitigs, kmers, gene presence absence, etc.
+There are many distinct approaches, for example using VCFs, unitigs, kmers, gene presence-absence, etc.
 To ensure proper functionality of BASS-GWAS, the representation of genetic variation should be both *comprehensive*, and *precise*.
 This is especially important when using adaptive sequential sampling. Unitigs are usually a good choice. 
 
 **DO NOT use adaptive sequential sampling with highly redundant representations such as kmers**
 
-**DO NOT use adaptive sequential sampling with gene presence absence data alone**
+**DO NOT use adaptive sequential sampling with gene presence-absence data alone**
 
 ## Inspecting the input data
 The variant file in the toy dataset uses unitigs as variant identifiers and `sra` accession numbers as isolate identifiers.
@@ -86,7 +86,7 @@ mkdir gwas_inputs
 ```
 
 Next we will use the data preprocessing script `prepare_data.R` to process the variant presence-absence file and the phylogeny into BASS-GWAS inputs.
-As a part of preprocessing, variant presence absence patterns will be standardised, centred, and deduplicated. The phylogeny is used to compute a factorised, low rank, similarity matrix.
+As a part of preprocessing, variant presence-absence patterns will be standardised, centred, and deduplicated. The phylogeny is used to compute a factorised, low-rank similarity matrix.
 
 `prepare_data.R` usage:
 ```{bash}
@@ -95,17 +95,17 @@ Rapp ../helper_scripts/prepare_data.R --help
 - `--af-threshold` can be used to set an optional allele frequency filter. Variants with frequency lower than this value will be discarded. Default: 0.
 - `--svd_threshold` controls the fraction of variance of the original phylogenetic correlation matrix that will be retained. Default: 0.99.
 
-We will now use the script to preprocess the toy data. To speed up inference for the purposes of this tutorial, we will retain only 90% of the variance
+We will now use the script to preprocess the toy data. To speed up inference for the purposes of this tutorial, we will retain only 90% of the variance.
 ```{bash, warning=FALSE, message=FALSE}
 Rapp ../helper_scripts/prepare_data.R ../sample_data/variants.rtab ../sample_data/tree.tre --odir gwas_inputs --svd_threshold 0.9
 ```
-This will generate the following input files in an gwas_inputs subdirectory.
+This will generate the following input files in a `gwas_inputs` subdirectory.
 
-The following two files are subsequently used with BASS-GWAS
+The following two files are subsequently used with BASS-GWAS:
 
-- `patterns_centred.csv` a centred, minorized, and deduplicated variant presence absence file for use with BASS-GWAS.
+- `patterns_centred.csv`: a centred, minorized, and deduplicated variant presence absence file for use with BASS-GWAS.
 
-- `U.csv` & `S.csv` a low-rank factorisation of the correlation matrix implied by the phylogeny for use with BASS-GWAS.
+- `U.csv` & `S.csv`: a low-rank factorisation of the correlation matrix implied by the phylogeny for use with BASS-GWAS.
 
 The `vars2patts.csv` file maps between the original variant identifiers and the deduplicated variants that form `patterns_centred.csv`:
 
