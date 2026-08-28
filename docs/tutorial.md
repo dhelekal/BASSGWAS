@@ -25,7 +25,7 @@ First we load the necessary libraries used in this tutorial
 **NOTICE: RE-RUNNING THIS TUTORIAL REQUIRES ~16GB OF RAM AND 4 CPU
 CORES**
 
-**EXPECTED EXECUTION TIME: ~45MIN**
+**EXPECTED EXECUTION TIME: ~25-45MIN**
 
 # Introduction
 
@@ -421,6 +421,10 @@ contains 20000 variants, this should only take a few minutes.
     ## Done
     ## Designing next experiment ...
 
+    paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
+
+    ## [1] "Run time: 4.54163251717885 minutes."
+
 When using BASSGWAS with real data using up to 4 threads per chain is
 recommended. We recommend running chains for 500 × 1000 iterations.
 
@@ -593,7 +597,7 @@ In turn, position PIPs can be visualised as a manhattan plot:
             ylim(0,1)+
             labs(y="PIP", x="Position (KB)")
 
-![](tutorial_files/figure-markdown_strict/unnamed-chunk-12-1.png)
+![](tutorial_files/figure-markdown_strict/unnamed-chunk-14-1.png)
 
 ### Using variant annotations
 
@@ -698,6 +702,8 @@ rounds.
 
 ### Round 0
 
+Run BASS-GWAS
+
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round0/data.csv --odir round0 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
     ## Adding worker processes ...
@@ -726,6 +732,10 @@ rounds.
     ## Designing next experiment ...
     ## Design objective value: 4.348121956898375
     ## Writing design ...
+
+    paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
+
+    ## [1] "Run time: 3.71504858334859 minutes."
 
 ### Round 1
 
@@ -767,6 +777,10 @@ Run BASS-GWAS
     ## Design objective value: 3.589236853583767
     ## Writing design ...
 
+    paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
+
+    ## [1] "Run time: 4.3894473473231 minutes."
+
 Compute position PIPS
 
     Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv round1/position_pips.csv round1/par_draws.csv round1/gamma_draws.csv gwas_inputs/vars2patts.csv
@@ -781,7 +795,7 @@ Manhattan plot for round 1:
             ylim(0,1)+
             labs(y="PIP", x="Position (KB)")
 
-![](tutorial_files/figure-markdown_strict/unnamed-chunk-23-1.png)
+![](tutorial_files/figure-markdown_strict/unnamed-chunk-29-1.png)
 
 ### Round 2
 
@@ -799,7 +813,7 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.1641711248975746
+    ## Found xi=3.1641711248975737
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -820,8 +834,12 @@ Run BASS-GWAS
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.6216314793974256
+    ## Design objective value: 3.6216314793974274
     ## Writing design ...
+
+    paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
+
+    ## [1] "Run time: 4.51749251683553 minutes."
 
 Compute position PIPS
 
@@ -837,7 +855,7 @@ Manhattan plot for round 2:
             ylim(0,1)+
             labs(y="PIP", x="Position (KB)")
 
-![](tutorial_files/figure-markdown_strict/unnamed-chunk-27-1.png)
+![](tutorial_files/figure-markdown_strict/unnamed-chunk-35-1.png)
 
 ### Round 3
 
@@ -879,6 +897,10 @@ Run BASS-GWAS
     ## Design objective value: 2.7121710027584403
     ## Writing design ...
 
+    paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
+
+    ## [1] "Run time: 4.37567210197449 minutes."
+
 Compute position PIPS
 
     Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv round3/position_pips.csv round3/par_draws.csv round3/gamma_draws.csv gwas_inputs/vars2patts.csv
@@ -893,7 +915,7 @@ Manhattan plot for round 3:
             ylim(0,1)+
             labs(y="PIP", x="Position (KB)")
 
-![](tutorial_files/figure-markdown_strict/unnamed-chunk-31-1.png)
+![](tutorial_files/figure-markdown_strict/unnamed-chunk-41-1.png)
 
 ### Round 4
 
@@ -935,6 +957,10 @@ Run BASS-GWAS
     ## Design objective value: 1.7890774758756676
     ## Writing design ...
 
+    paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
+
+    ## [1] "Run time: 4.5005388657252 minutes."
+
 Compute position PIPS
 
     Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv round4/position_pips.csv round4/par_draws.csv round4/gamma_draws.csv gwas_inputs/vars2patts.csv
@@ -949,10 +975,11 @@ Manhattan plot for round 4:
             ylim(0,1)+
             labs(y="PIP", x="Position (KB)")
 
-![](tutorial_files/figure-markdown_strict/unnamed-chunk-35-1.png) After
+![](tutorial_files/figure-markdown_strict/unnamed-chunk-47-1.png) After
 round 4, representing a total of 68 (64 + 4) isolates both causal loci,
-*parC* and *gyrA*, were identified with high confidence (PIP $ &gt;
-0.9$). This makes it clear that variants in both loci are required to
+*parC* and *gyrA*, were identified with high confidence (PIP
+ &gt; 0.9
+). This makes it clear that variants in both loci are required to
 achieve high-level resistance.
 
 Let’s see if the the unitig-level PIPs are now more precise.

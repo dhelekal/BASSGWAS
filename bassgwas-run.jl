@@ -301,7 +301,7 @@ us_full_draws = permutedims(reshape(usf_full, ndraws, nchains, :),(1,3,2))
 
 cchn = Chains(cpars_draws, [:n, :sigma, :r, :c, :icept, :Z])
 println("Tempered distribution diagnostics:")
-show(stdout, "text/plain", describe(cchn)[1])
+show(stdout, "text/plain", summarystats(cchn))
 println("Saving draws ...")
 
     CSV.write(outdir*"/par_draws.csv",DataFrame(cchn))

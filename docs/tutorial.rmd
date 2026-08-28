@@ -210,10 +210,17 @@ dat_small %>% group_by(cip) %>%
 dat_small %>% write_csv("gwas_inputs/data200.csv")
 ```
 
+```{r, include=FALSE}
+tbegin <- Sys.time()
+```
 We're now ready to run BASSGWAS sampling. As the toy dataset only contains 20000 variants, this should only take a few minutes.
 ```{bash, warning=FALSE, message=FALSE, eval=TRUE}
 mkdir gwas_outputs
 julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile gwas_inputs/data200.csv --odir gwas_outputs --batchsz 0 --ndraws 500 --nthin 250 --nchains 2
+```
+
+```{r}
+paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 ```
 
 When using BASSGWAS with real data using up to 4 threads per chain is recommended. We recommend running chains for  $500\times 1000$ iterations.
@@ -382,10 +389,17 @@ write_csv(dat_small[to_keep,], "round0/data.csv")
 We will run BASS-GWAS adaptive design using a batch size of 16 for 4 rounds.
 
 ### Round 0
+```{r, include=FALSE}
+tbegin <- Sys.time()
+```
+Run BASS-GWAS
 ```{bash, warning=FALSE, message=FALSE, eval=TRUE}
 julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round0/data.csv --odir round0 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 ```
 
+```{r}
+paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
+```
 ### Round 1
 Create an output directory for round 1 and append the entries for the selected isolates
 ```{bash, warning=FALSE, message=FALSE, eval=TRUE}
@@ -393,9 +407,16 @@ mkdir round1
 cp round0/data.csv round1/data.csv
 grep -wf round0/design.txt ../sample_data/data_full.csv >> round1/data.csv
 ```
+```{r, include=FALSE}
+tbegin <- Sys.time()
+```
 Run BASS-GWAS
 ```{bash, warning=FALSE, message=FALSE, eval=TRUE}
 julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round1/data.csv --odir round1 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
+```
+
+```{r}
+paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 ```
 Compute position PIPS
 ```{bash, warning=FALSE, message=FALSE}
@@ -419,9 +440,16 @@ mkdir round2
 cp round1/data.csv round2/data.csv
 grep -wf round1/design.txt ../sample_data/data_full.csv >> round2/data.csv
 ```
+```{r, include=FALSE}
+tbegin <- Sys.time()
+```
 Run BASS-GWAS
 ```{bash, warning=FALSE, message=FALSE, class.source = 'fold-hide', eval=TRUE}
 julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round2/data.csv --odir round2 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
+```
+
+```{r}
+paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 ```
 Compute position PIPS
 ```{bash, warning=FALSE, class.source = 'fold-hide', message=FALSE}
@@ -445,9 +473,16 @@ mkdir round3
 cp round2/data.csv round3/data.csv
 grep -wf round2/design.txt ../sample_data/data_full.csv >> round3/data.csv
 ```
+```{r, include=FALSE}
+tbegin <- Sys.time()
+```
 Run BASS-GWAS
 ```{bash, warning=FALSE, message=FALSE, class.source = 'fold-hide', eval=TRUE}
 julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round3/data.csv --odir round3 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
+```
+
+```{r}
+paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 ```
 Compute position PIPS
 ```{bash, warning=FALSE, class.source = 'fold-hide', message=FALSE}
@@ -471,9 +506,16 @@ mkdir round4
 cp round3/data.csv round4/data.csv
 grep -wf round3/design.txt ../sample_data/data_full.csv >> round4/data.csv
 ```
+```{r, include=FALSE}
+tbegin <- Sys.time()
+```
 Run BASS-GWAS
 ```{bash, warning=FALSE, message=FALSE, class.source = 'fold-hide', eval=TRUE}
 julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round4/data.csv --odir round4 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
+```
+
+```{r}
+paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 ```
 Compute position PIPS
 ```{bash, warning=FALSE, class.source = 'fold-hide', class.source = 'foldable', message=FALSE}
