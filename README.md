@@ -44,7 +44,14 @@ Additionally, the underlying sparse regression model can be used for fine-mappin
 See the [tutorial](docs/tutorial.md) before use.
 
 ### Required dependencies
-The BASS-GWAS package requires `julia>=1.11`. 
+The BASS-GWAS package requires `julia>=1.11`. The launcher scripts require the following packages:
+- `MCMCChains`
+- `DataFrames`
+- `CSV`
+- `ArgParse`
+- `UnPack`
+- `Optim`
+- `Distributions`
 
 See the official [julia](https://julialang.org/) website for installation instructions.
 
