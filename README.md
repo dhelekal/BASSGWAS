@@ -32,7 +32,7 @@ BASS-GWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a fram
 
 <img src='docs/diagram.png' align="center" height="500" />
 
-BASSGWAS is useful when:
+BASS-GWAS is useful when:
 1. You want to find the genetic basis of some observed phenotypic variation.
 2. You have prior evidence of phenotypic variation.
 3. You need to do phenotyping yourself.
