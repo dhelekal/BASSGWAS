@@ -26,7 +26,7 @@
 
 
 ## Introduction
-BASSGWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a framework for efficient bacterial genome-wide association studies (GWAS) that require phenotyping. BASSGWAS combines a sparse whole-genome regression model with Bayesian adaptive experimental design to select batches of isolates from a large, sequenced collection for iterative experimental phenotyping. By incorporating information from past iterations and the distribution of variants to select isolates for phenotyping, BASSGWAS can substantially reduce the number of experimental measurements needed to power a GWAS study. See the [preprint](LINK) for benchmarks and details.
+BASS-GWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a framework for efficient bacterial genome-wide association studies (GWAS) that require phenotyping. BASS-GWAS combines a sparse whole-genome regression model with Bayesian adaptive experimental design to select batches of isolates from a large, sequenced collection for iterative experimental phenotyping. By incorporating information from past iterations and the distribution of variants to select isolates for phenotyping, BASS-GWAS can substantially reduce the number of experimental measurements needed to power a GWAS study. See the [preprint](LINK) for benchmarks and details.
 
 ### Workflow diagram
 
@@ -44,7 +44,7 @@ Additionally, the underlying sparse regression model can be used for fine-mappin
 See the [tutorial](docs/tutorial.md) before use.
 
 ### Required dependencies
-The BASSGWAS package requires `julia>=1.11`. 
+The BASS-GWAS package requires `julia>=1.11`. 
 
 See the official [julia](https://julialang.org/) website for installation instructions.
 
@@ -55,12 +55,12 @@ The scripts in the `helper_scripts` directory require a working `R>=4.1.0` insta
 - `ape`
 
 ### Package installation
-Use the `julia` package manager to install BASSGWAS from `github`:
+Use the `julia` package manager to install BASS-GWAS from `github`:
 
 ```using Pkg; Pkg.add(url="https://github.com/dhelekal/BASSGWAS", subdir="BASSGWAS")```
 
 ## Usage
-Using BASSGWAS requires a variant presence-absence file together with a phylogeny that describes the population structure. **See the [tutorial](docs/tutorial.md) before use**.
+Using BASS-GWAS requires a variant presence-absence file together with a phylogeny that describes the population structure. **See the [tutorial](docs/tutorial.md) before use**.
 
 ### Data preprocessing
 To prepare the inputs for use with BASSGWAS use:
