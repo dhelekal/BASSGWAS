@@ -26,7 +26,7 @@
 
 
 ## Introduction
-BASS-GWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a framework for efficient bacterial genome-wide association studies (GWAS) that require phenotyping. BASS-GWAS combines a sparse whole-genome regression model with Bayesian adaptive experimental design to select batches of isolates from a large, sequenced collection for iterative experimental phenotyping. By incorporating information from past iterations and the distribution of variants to select isolates for phenotyping, BASS-GWAS can substantially reduce the number of experimental measurements needed to power a GWAS study. See the [preprint](LINK) for benchmarks and details.
+BASS-GWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a framework for efficient bacterial genome-wide association studies (GWAS) that require phenotyping. BASS-GWAS can select batches of isolates from a large, sequenced collection for iterative experimental phenotyping. To do this, it combines a sparse whole-genome regression model with Bayesian adaptive experimental design. BASS-GWAS reduces the number of experimental measurements needed to power GWAS by incorporating information from past iterations and the variant distribution. See the [preprint](LINK) for benchmarks and details.
 
 ### Workflow diagram
 
@@ -38,7 +38,7 @@ BASS-GWAS is useful when:
 3. You need to do phenotyping yourself.
 4. You have access to a large sequenced collection of (at least several hundred) isolates you can phenotype.
 
-Additionally, the underlying sparse regression model can be used for fine-mapping **independent of experimental design functionality**. Currently, only binary phenotypes are supported. 
+Additionally, the underlying sparse regression model can be used for fine-mapping **independently of experimental design functionality**. Currently, it supports only binary phenotypes. 
 
 ## Installation
 See the [tutorial](docs/tutorial.md) before use.
@@ -60,7 +60,7 @@ Use the `julia` package manager to install BASS-GWAS from `github`:
 ```using Pkg; Pkg.add(url="https://github.com/dhelekal/BASSGWAS", subdir="BASSGWAS")```
 
 ## Usage
-Using BASS-GWAS requires a variant presence-absence file together with a phylogeny that describes the population structure. **See the [tutorial](docs/tutorial.md) before use**.
+BASS-GWAS requires a variant presence-absence file and a phylogeny that describes the population structure. **See the [tutorial](docs/tutorial.md) before use**.
 
 ### Data preprocessing
 To prepare the inputs for use with BASSGWAS use:
@@ -74,19 +74,21 @@ To run GWAS use:
 
 `julia bassgwas-run.jl --pfile [patterns_centred.csv] --ufile [U.csv] --sfile [S.csv] --obsfile [obs.csv] --odir [OUTPUT_DIRECTORY] --batchsz [BATCH_SIZE] [--inclnext INCLNEXT.txt] [--seed 0] [--ndraws 1000] [--nthin 500] [--nchains 1] [--p_mean 5.0] [--pr_0 0.25] [--randdes]`.
 
-This will write posterior draws and the experimental design to the output directory. Setting `--batchsz 0` will disable experimental design and run GWAS only.
+This will write posterior draws and the experimental design to the output directory. Setting `--batchsz 0` disables experimental design and runs GWAS only.
 
 ### Experimental design
-Experimental design can be enabled by setting the batch size argument in `bassgwas-run.jl` argument to a non-zero value. Alternatively, experimental design can be run standalone, using posterior draws from a prior GWAS run:
+Enable experimental design by setting the batch size argument in `bassgwas-run.jl` to a non-zero value. Alternatively, run experimental design as a standalone, using posterior draws from a prior GWAS run:
 
 `julia bassgwas-design.jl --pfile [patterns_centred.csv] [U.csv] --sfile [S.csv] --obsfile [obs.csv] --b_draws [b_draws.csv] --u_draws [u_draws.csv] --par_draws [par_draws.csv] --ofile [output_file.txt] --batchsz [batch_size] [--inclnext INCLNEXT.txt]` 
 
 # Feedback/Issues/Help
-Please submit a github issue or get in touch by email `david.helekal@gmail.com`
+Please submit a GitHub issue or get in touch by email `david.helekal@gmail.com`
 
 # License 
 GNU GPL-3
 
 # Citation
 See preprint
+
+<sub>Logo design: David Helekal, Maria Theiss</sub>
 
