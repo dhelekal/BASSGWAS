@@ -25,7 +25,6 @@ rm -r gwas_outputs
 First we load the necessary libraries used in this tutorial
 ```{r, warning=FALSE, message=FALSE}
 library(ape)
-library(ggtree)
 library(tidyverse)
 library(ggplot2)
 
@@ -33,15 +32,16 @@ set.seed(1)
 ```
 
 **NOTICE: RE-RUNNING THIS TUTORIAL REQUIRES ~16GB OF RAM AND 4 CPU CORES**
+
 **EXPECTED EXECUTION TIME: ~45MIN**
 
 # Introduction
-This tutorial assumes that you have previously downloaded the helper & launch scripts in this repository.
+This tutorial assumes that you have previously downloaded the files in this repository.
 The first section of the tutorial covers the general usage of the GWAS model. 
 The second section covers adaptive experimental design.
 
 Throughout this tutorial we will be using the toy data found in the `sample_data` folder.
-This is a version of the ciprofloxacin resistance benchmark datasets used in the manuscript modified to contain only 20,000 unique variants.
+This is a version of the ciprofloxacin resistance benchmark dataset used in the manuscript modified to contain only 20,000 unique variants.
 The toy dataset uses *unitigs* to characterise genetic variation.
 
 # Input Data
@@ -192,12 +192,12 @@ BASS-GWAS uses efficient MCMC importance sampling and will create multiple files
 
 ## Running GWAS on a toy dataset
 We will now demonstrate GWAS functionality on the toy dataset. This dataset was constructed using data from (_Reimche 2023_).
-The trait in this dataset is high-level ($$\geq 1\mu g\,mL^{-1}$$) ciprofloxacin resistance in _N. gonorrhoeae_.
+The trait in this dataset is high-level ($$ \geq 1 \mu g \, mL^{-1}$$) ciprofloxacin resistance in _N. gonorrhoeae_.
 To attain this level of resistance, at least one substitution in each of _gyrA_ and _parC_ genes is known to be required. 
 
 The polygenic nature of this trait makes it challenging for GWAS with binary phenotypes.
 
-We will run 2 chains in parallel each for a total of $$250\times 500$$ iterations. 
+We will run 2 chains in parallel each for a total of $$250 \times 500$$ iterations. 
 Moreover we will parallelize each chain across 2 CPU cores using `julia -t2`. 
 To speed things up, we will downsample the full dataset to 200 isolates.
 
@@ -210,7 +210,7 @@ dat_small %>% group_by(cip) %>%
 dat_small %>% write_csv("gwas_inputs/data200.csv")
 ```
 
-We're now ready to run BASSGWAS sampling. As the toy dataset only contains 10000 variants, this should only take a few minutes.
+We're now ready to run BASSGWAS sampling. As the toy dataset only contains 20000 variants, this should only take a few minutes.
 ```{bash, warning=FALSE, message=FALSE, eval=TRUE}
 mkdir gwas_outputs
 julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile gwas_inputs/data200.csv --odir gwas_outputs --batchsz 0 --ndraws 500 --nthin 250 --nchains 2
@@ -329,8 +329,8 @@ read_csv("gwas_outputs/locus_pips.csv", progress=F, show_col_types=F) %>%
 Based on these two summaries we can see that there are two peaks at the _gyrA_ and _parC_ loci, 
 substitutions in both of which are required to attain high-level ciprofloxacin resistance. 
 
-While _gyrA_ was identified with a relatively high-level of confidence ($$PIP > 0.7$$), 
-the confidence for the _parC_ hit remains low ($$PIP < 0.45$$). This is a consequence of random sampling.
+While _gyrA_ was identified with a relatively high-level of confidence (PIP $$ > 0.7$$), 
+the confidence for the _parC_ hit remains low (PIP $$ < 0.45$$). This is a consequence of random sampling.
 
 Relying on hits with low PIPs can still lead to successful identification of causative variants but it will increase false positive rates, 
 in turn leading to failed validation experiments. 
@@ -489,7 +489,7 @@ read_csv("round4/position_pips.csv", progress=F, show_col_types=F) %>%
         ylim(0,1)+
         labs(y="PIP", x="Position (KB)")
 ```
-After round 4, representing a total of 68 (64 + 4) isolates both causal loci,  _parC_ and _gyrA_, were identified with high confidence ($PIP > 0.9$). 
+After round 4, representing a total of 68 (64 + 4) isolates both causal loci,  _parC_ and _gyrA_, were identified with high confidence (PIP $ > 0.9$). 
 This makes it clear that variants in both loci are required to achieve high-level resistance.
 
 Let's see if the the unitig-level PIPs are now more precise.
