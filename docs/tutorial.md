@@ -404,13 +404,6 @@ contains 20000 variants, this should only take a few minutes.
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
-    ## 
-    ## Iterations        = 1:1:500
-    ## Number of chains  = 2
-    ## Samples per chain = 500
-    ## parameters        = n, sigma, r, c, icept, Z
-    ## 
     ## Summary Statistics
     ## 
     ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   e ⋯
@@ -424,19 +417,6 @@ contains 20000 variants, this should only take a few minutes.
     ##            Z    0.0701    0.0352    0.0012   802.5125   856.3953    1.0048     ⋯
     ## 
     ##                                                                 1 column omitted
-    ## 
-    ## Quantiles
-    ## 
-    ##   parameters       2.5%     25.0%     50.0%     75.0%     97.5%
-    ##       Symbol    Float64   Float64   Float64   Float64   Float64
-    ## 
-    ##            n     1.0000    4.0000    6.0000    9.0000   18.0000
-    ##        sigma     0.2445    0.4597    0.7074    1.1933    4.7114
-    ##            r     0.0006    0.0736    0.3257    1.0539    5.4339
-    ##            c     2.3544    4.9932    8.0289   14.1178   46.4662
-    ##        icept   -11.6044   -6.1133   -4.5976   -3.4744   -2.1875
-    ##            Z     0.0000    0.0507    0.0677    0.0918    0.1420
-    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
@@ -728,13 +708,6 @@ rounds.
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
-    ## 
-    ## Iterations        = 1:1:500
-    ## Number of chains  = 2
-    ## Samples per chain = 500
-    ## parameters        = n, sigma, r, c, icept, Z
-    ## 
     ## Summary Statistics
     ## 
     ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat    ⋯
@@ -748,19 +721,6 @@ rounds.
     ##            Z    0.0760    0.0346    0.0012    761.3074   691.4465    1.0016    ⋯
     ## 
     ##                                                                 1 column omitted
-    ## 
-    ## Quantiles
-    ## 
-    ##   parameters      2.5%     25.0%     50.0%     75.0%     97.5%
-    ##       Symbol   Float64   Float64   Float64   Float64   Float64
-    ## 
-    ##            n    0.0000    3.0000    6.0000   11.0000   24.0000
-    ##        sigma    0.2320    0.4870    0.7313    1.2140    3.5066
-    ##            r    0.0004    0.1055    0.6876    2.6500   16.6436
-    ##            c    1.1291    3.0548    5.6848   10.8309   45.1926
-    ##        icept   -8.7725   -3.1818   -1.5062   -0.1721    2.8281
-    ##            Z    0.0320    0.0534    0.0699    0.0891    0.1762
-    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
@@ -788,13 +748,6 @@ Run BASS-GWAS
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
-    ## 
-    ## Iterations        = 1:1:500
-    ## Number of chains  = 2
-    ## Samples per chain = 500
-    ## parameters        = n, sigma, r, c, icept, Z
-    ## 
     ## Summary Statistics
     ## 
     ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat    ⋯
@@ -808,19 +761,6 @@ Run BASS-GWAS
     ##            Z    0.0681    0.0289    0.0011    635.7887   710.0038    1.0005    ⋯
     ## 
     ##                                                                 1 column omitted
-    ## 
-    ## Quantiles
-    ## 
-    ##   parameters      2.5%     25.0%     50.0%     75.0%     97.5%
-    ##       Symbol   Float64   Float64   Float64   Float64   Float64
-    ## 
-    ##            n    0.0000    2.0000    6.0000   11.0000   24.0000
-    ##        sigma    0.2306    0.4740    0.7302    1.2736    6.2857
-    ##            r    0.0011    0.0946    0.5140    1.7768    9.6025
-    ##            c    1.3196    3.2842    5.5364   10.6165   36.7292
-    ##        icept   -8.8650   -3.7666   -2.4301   -1.4431   -0.3395
-    ##            Z    0.0255    0.0492    0.0623    0.0810    0.1393
-    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
@@ -859,18 +799,11 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.1641711248975737
+    ## Found xi=3.1641711248975746
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
-    ## 
-    ## Iterations        = 1:1:500
-    ## Number of chains  = 2
-    ## Samples per chain = 500
-    ## parameters        = n, sigma, r, c, icept, Z
-    ## 
     ## Summary Statistics
     ## 
     ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
@@ -884,23 +817,10 @@ Run BASS-GWAS
     ##            Z    0.0712    0.0330    0.0011    931.7134    941.7202    0.9991   ⋯
     ## 
     ##                                                                 1 column omitted
-    ## 
-    ## Quantiles
-    ## 
-    ##   parameters      2.5%     25.0%     50.0%     75.0%     97.5%
-    ##       Symbol   Float64   Float64   Float64   Float64   Float64
-    ## 
-    ##            n    1.0000    4.0000    6.0000   10.0000   24.0250
-    ##        sigma    0.2365    0.4668    0.7296    1.2510    4.9469
-    ##            r    0.0006    0.0517    0.2369    0.9283    5.0831
-    ##            c    1.8110    4.3477    7.0492   13.6488   44.7124
-    ##        icept   -9.9633   -4.9022   -3.1962   -2.2347   -0.9200
-    ##            Z    0.0000    0.0527    0.0669    0.0866    0.1510
-    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.6216314793974274
+    ## Design objective value: 3.6216314793974256
     ## Writing design ...
 
 Compute position PIPS
@@ -940,13 +860,6 @@ Run BASS-GWAS
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
-    ## 
-    ## Iterations        = 1:1:500
-    ## Number of chains  = 2
-    ## Samples per chain = 500
-    ## parameters        = n, sigma, r, c, icept, Z
-    ## 
     ## Summary Statistics
     ## 
     ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
@@ -960,19 +873,6 @@ Run BASS-GWAS
     ##            Z    0.0687    0.0314    0.0011    783.3491    909.5722    0.9998   ⋯
     ## 
     ##                                                                 1 column omitted
-    ## 
-    ## Quantiles
-    ## 
-    ##   parameters       2.5%     25.0%     50.0%     75.0%     97.5%
-    ##       Symbol    Float64   Float64   Float64   Float64   Float64
-    ## 
-    ##            n     1.0000    4.0000    6.0000   10.0000   20.0000
-    ##        sigma     0.2273    0.4649    0.7211    1.2977    4.4619
-    ##            r     0.0002    0.0330    0.1885    0.6383    3.3212
-    ##            c     1.7219    4.2439    7.2999   12.7610   33.3603
-    ##        icept   -11.1544   -6.1086   -4.1185   -2.7743   -1.0304
-    ##            Z     0.0000    0.0518    0.0650    0.0842    0.1442
-    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
@@ -1016,13 +916,6 @@ Run BASS-GWAS
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
-    ## 
-    ## Iterations        = 1:1:500
-    ## Number of chains  = 2
-    ## Samples per chain = 500
-    ## parameters        = n, sigma, r, c, icept, Z
-    ## 
     ## Summary Statistics
     ## 
     ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
@@ -1036,19 +929,6 @@ Run BASS-GWAS
     ##            Z    0.0576    0.0265    0.0010    662.9775    915.1700    0.9994   ⋯
     ## 
     ##                                                                 1 column omitted
-    ## 
-    ## Quantiles
-    ## 
-    ##   parameters       2.5%     25.0%     50.0%     75.0%     97.5%
-    ##       Symbol    Float64   Float64   Float64   Float64   Float64
-    ## 
-    ##            n     2.0000    5.0000    8.0000   11.0000   22.0000
-    ##        sigma     0.2396    0.4745    0.7255    1.3083    6.1844
-    ##            r     0.0003    0.0407    0.1997    0.7232    4.4692
-    ##            c     2.5321    6.2428   10.3286   17.1735   43.0508
-    ##        icept   -15.1601   -9.5743   -6.9759   -5.2701   -2.3826
-    ##            Z     0.0000    0.0461    0.0582    0.0714    0.1138
-    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
