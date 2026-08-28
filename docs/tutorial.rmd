@@ -33,7 +33,7 @@ set.seed(1)
 
 **NOTICE: RE-RUNNING THIS TUTORIAL REQUIRES ~16GB OF RAM AND 4 CPU CORES**
 
-**EXPECTED EXECUTION TIME: ~45MIN**
+**EXPECTED EXECUTION TIME: ~25-45MIN**
 
 # Introduction
 This tutorial assumes that you have previously downloaded the files in this repository.
