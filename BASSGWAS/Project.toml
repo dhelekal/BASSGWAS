@@ -1,7 +1,7 @@
 name = "BASSGWAS"
 uuid = "6a21c39e-d3fa-4942-bb30-931d87fdea1a"
-authors = ["David Helekal <david.helekal@gmail.com>"]
 version = "0.1.0"
+authors = ["David Helekal <david.helekal@gmail.com>"]
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"

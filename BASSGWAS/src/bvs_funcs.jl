@@ -162,9 +162,7 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     qterm = scache.qterm
     ssq_curr = -(FX1 * Ainv * FX1') + qterm
     det_curr = logabsdet(AChol)[1]
-    #det_curr += scache.cdet + d*log(c)
     det_curr += scache.cdet + (d-1)*log(c) + log(mc)
-    #det_curr += scache.cdet + (d-1)*log(c) + log(4.0)
 
     _inc_up2!(view(ssq, idx0), view(dets, idx0),
         c, AChol, QX1, QX0, FX1, FX0, X1tX0, sqX0, sinv)
@@ -191,7 +189,9 @@ function _inc_up2!(ssq, dets, c, AChol, QX1, QX0, FX1, FX0, X1tX0, sqX0, sinv)
     W = copy(FX0')
 
     AinvBs = copy(X1tX0)
-    a = similar(ssq)
+    
+    cinv = 1.0 / c
+    a = cinv .+ sqX0 .* sinv
 
     nt = Threads.nthreads()
     blck_sz = ceil(Int64,n/nt)
@@ -203,8 +203,7 @@ function _inc_up2!(ssq, dets, c, AChol, QX1, QX0, FX1, FX0, X1tX0, sqX0, sinv)
         _W = view(W, sp)
         _AinvBs = view(AinvBs, :, sp)
         _QX0 = view(QX0, :, sp)
-        _sqX0 = view(sqX0, sp)
-        _up_blck2!(_a, _W, _QX0, _AinvBs, U, QX1, AChol, _sqX0, sinv, c, quad_term, d)
+        _up_blck2!(_a, _W, _QX0, _AinvBs, U, QX1, AChol, sinv, c, quad_term, d)
     end
 
     #a .*= -1.0
@@ -219,39 +218,40 @@ function _inc_up2!(ssq, dets, c, AChol, QX1, QX0, FX1, FX0, X1tX0, sqX0, sinv)
     ssq .= W
 end
 
-function _up_blck2!(a, W, QX0, AinvBs, U, QX1, AChol, sqX0, sinv, c, qterm, d)
+function _up_blck2!(a, W, QX0, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
     ## Determinant Updates
     # x_i' Cinv x_i forall i
-    gemm!('T', 'N', -1.0, QX1, QX0, sinv, AinvBs)
-    ldiv!(AChol.U', AinvBs)
-    gemv!('T', 1.0, AinvBs, U, -1.0, W)
-
     @turbo for j in axes(QX0,2)
         s = 0.0 
         for i in axes(QX0,1)
             s += QX0[i,j]*QX0[i,j]
         end
-        a[j] = -s
+        a[j] -= s
     end
+
+    gemm!('T', 'N', -1.0, QX1, QX0, sinv, AinvBs)
+    ldiv!(AChol.U', AinvBs)
 
     @turbo for j in axes(AinvBs,2)
         s = 0.0 
         for i in axes(AinvBs,1)
-            s += AinvBs[i,j]*AinvBs[i,j]
+            x = AinvBs[i,j]
+            s += x*x
         end
         a[j] -= s
     end
 
-    @turbo for i in eachindex(a)
-        a[i] += 1.0/c + sqX0[i]*sinv
-    end
+    gemv!('T', 1.0, AinvBs, U, -1.0, W)
 
     @turbo for i in eachindex(a)
-        W[i] = -W[i]*W[i]/a[i] + qterm
+        w=W[i]
+        W[i] = -w*w/a[i] + qterm
     end
-
+    
+    lc = log(c)
     @turbo for i in eachindex(a)
-        a[i] = log(abs(a[i])) + log(c)
+        x = log(abs(a[i]))
+        a[i] = x + lc
     end
 
     nothing

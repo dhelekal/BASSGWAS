@@ -58,17 +58,14 @@ function updateSCache!(cache, ps)
     YD = YtU * D2
     copy!(cache.F, Y')
     Octavian.matmul!(cache.F', U, YD', -1.0, sinv)
-    #gemv!('N', -1.0, U, YD', sinv, cache.F')
-
     
     copy!(cache.FX, YtX)
     Octavian.matmul!(cache.FX', UtX', YD', -1.0, sinv)
-    #gemv!('T', -1.0, UtX, YD', sinv, cache.FX')
 
+    #no three argument lmul! :(
     copy!(cache.QX, UtX)
     lmul!(D, cache.QX)
 
-    #cache.cdet = -2.0*(logabsdet(D)[1]+ns*log(s)) + sum(log.(abs.(S))) + ns*log(r) + log(s)*n
     cache.cdet = -2.0*(logabsdet(D)[1]+ns*log(s))+ ns*log(r) + log(s)*n
     for i in eachindex(S)
          cache.cdet += log(abs(S[i]))
