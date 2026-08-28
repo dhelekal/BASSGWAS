@@ -39,7 +39,6 @@ function ProbitBVSSampler(X::AbstractMatrix{Tx}, Y::AbstractVector{Ty}, U::Abstr
     Yinit = abs.(randn(rng, n)) .* signs
     rinit = abs(1.0*randn(rng)) + 1e-8
     cinit = sample_c ? abs(1.0*randn(rng)) + 1e-8 : c
-    mcinit = 100.00
 
     sinit=1.0
 
