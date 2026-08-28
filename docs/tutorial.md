@@ -17,27 +17,28 @@
 First we load the necessary libraries used in this tutorial
 
     library(ape)
-    library(ggtree)
     library(tidyverse)
     library(ggplot2)
 
     set.seed(1)
 
 **NOTICE: RE-RUNNING THIS TUTORIAL REQUIRES ~16GB OF RAM AND 4 CPU
-CORES** **EXPECTED EXECUTION TIME: ~45MIN**
+CORES**
+
+**EXPECTED EXECUTION TIME: ~45MIN**
 
 # Introduction
 
-This tutorial assumes that you have previously downloaded the helper &
-launch scripts in this repository. The first section of the tutorial
-covers the general usage of the GWAS model. The second section covers
-adaptive experimental design.
+This tutorial assumes that you have previously downloaded the files in
+this repository. The first section of the tutorial covers the general
+usage of the GWAS model. The second section covers adaptive experimental
+design.
 
 Throughout this tutorial we will be using the toy data found in the
 `sample_data` folder. This is a version of the ciprofloxacin resistance
-benchmark datasets used in the manuscript modified to contain only
-20,000 unique variants. The toy dataset uses *unitigs* to characterise
-genetic variation.
+benchmark dataset used in the manuscript modified to contain only 20,000
+unique variants. The toy dataset uses *unitigs* to characterise genetic
+variation.
 
 # Input Data
 
@@ -390,34 +391,52 @@ dataset to 200 isolates.
     dat_small %>% write_csv("gwas_inputs/data200.csv")
 
 We’re now ready to run BASSGWAS sampling. As the toy dataset only
-contains 10000 variants, this should only take a few minutes.
+contains 20000 variants, this should only take a few minutes.
 
     mkdir gwas_outputs
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile gwas_inputs/data200.csv --odir gwas_outputs --batchsz 0 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.12.7+0.aarch64.apple.darwin14. You currently have `1.11.6+0.aarch64.apple.darwin14` installed. Run:
-    ## 
-    ##   juliaup update
-    ## 
-    ## in your terminal shell to install Julia 1.12.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.5474546959099467
+    ## Found xi=3.5474546959099564
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Summary Statistics
-    ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64       Missing
+    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
     ## 
-    ##            n    6.8120    4.5709    0.2399   386.1948   455.3415    1.0103       missing
-    ##        sigma    1.0800    1.2193    0.0376   974.3384   736.7259    1.0000       missing
-    ##            r    0.8860    1.5298    0.0578   735.7150   680.3518    1.0025       missing
-    ##            c   11.9975   13.3147    0.4610   621.6985   802.9035    1.0031       missing
-    ##        icept   -5.1359    2.4287    0.1577   247.6430   665.9075    1.0253       missing
-    ##            Z    0.0701    0.0352    0.0012   802.5125   856.3953    1.0048       missing
+    ## Iterations        = 1:1:500
+    ## Number of chains  = 2
+    ## Samples per chain = 500
+    ## parameters        = n, sigma, r, c, icept, Z
+    ## 
+    ## Summary Statistics
+    ## 
+    ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   e ⋯
+    ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64     ⋯
+    ## 
+    ##            n    6.8120    4.5709    0.2399   386.1948   455.3415    1.0103     ⋯
+    ##        sigma    1.0800    1.2193    0.0376   974.3384   736.7259    1.0000     ⋯
+    ##            r    0.8860    1.5298    0.0578   735.7150   680.3518    1.0025     ⋯
+    ##            c   11.9975   13.3147    0.4610   621.6985   802.9035    1.0031     ⋯
+    ##        icept   -5.1359    2.4287    0.1577   247.6430   665.9075    1.0253     ⋯
+    ##            Z    0.0701    0.0352    0.0012   802.5125   856.3953    1.0048     ⋯
+    ## 
+    ##                                                                 1 column omitted
+    ## 
+    ## Quantiles
+    ## 
+    ##   parameters       2.5%     25.0%     50.0%     75.0%     97.5%
+    ##       Symbol    Float64   Float64   Float64   Float64   Float64
+    ## 
+    ##            n     1.0000    4.0000    6.0000    9.0000   18.0000
+    ##        sigma     0.2445    0.4597    0.7074    1.1933    4.7114
+    ##            r     0.0006    0.0736    0.3257    1.0539    5.4339
+    ##            c     2.3544    4.9932    8.0289   14.1178   46.4662
+    ##        icept   -11.6044   -6.1133   -4.5976   -3.4744   -2.1875
+    ##            Z     0.0000    0.0507    0.0677    0.0918    0.1420
+    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
@@ -621,10 +640,11 @@ Based on these two summaries we can see that there are two peaks at the
 *gyrA* and *parC* loci, substitutions in both of which are required to
 attain high-level ciprofloxacin resistance.
 
-While *gyrA* was identified with a relatively high-level of confidence (
-*P**I**P* &gt; 0.7
-), the confidence for the *parC* hit remains low (
-*P**I**P* &lt; 0.45
+While *gyrA* was identified with a relatively high-level of confidence
+(PIP
+ &gt; 0.7
+), the confidence for the *parC* hit remains low (PIP
+ &lt; 0.45
 ). This is a consequence of random sampling.
 
 Relying on hits with low PIPs can still lead to successful
@@ -700,33 +720,51 @@ rounds.
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round0/data.csv --odir round0 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.12.7+0.aarch64.apple.darwin14. You currently have `1.11.6+0.aarch64.apple.darwin14` installed. Run:
-    ## 
-    ##   juliaup update
-    ## 
-    ## in your terminal shell to install Julia 1.12.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=2.8542089443169636
+    ## Found xi=2.854208944316965
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Summary Statistics
-    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64       Missing
+    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
     ## 
-    ##            n    7.5980    6.6832    0.2758    701.8529   689.1893    1.0008       missing
-    ##        sigma    1.4246   11.8817    0.3813   1012.9606   916.9188    1.0000       missing
-    ##            r    2.6950    6.3460    0.2016   1095.2376   985.3725    1.0027       missing
-    ##            c    9.6662   13.6617    0.4135   1016.7319   978.1122    0.9996       missing
-    ##        icept   -1.9056    2.8864    0.0942    906.7984   997.6708    1.0011       missing
-    ##            Z    0.0760    0.0346    0.0012    761.3074   691.4465    1.0016       missing
+    ## Iterations        = 1:1:500
+    ## Number of chains  = 2
+    ## Samples per chain = 500
+    ## parameters        = n, sigma, r, c, icept, Z
+    ## 
+    ## Summary Statistics
+    ## 
+    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat    ⋯
+    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64    ⋯
+    ## 
+    ##            n    7.5980    6.6832    0.2758    701.8529   689.1893    1.0008    ⋯
+    ##        sigma    1.4246   11.8817    0.3813   1012.9606   916.9188    1.0000    ⋯
+    ##            r    2.6950    6.3460    0.2016   1095.2376   985.3725    1.0027    ⋯
+    ##            c    9.6662   13.6617    0.4135   1016.7319   978.1122    0.9996    ⋯
+    ##        icept   -1.9056    2.8864    0.0942    906.7984   997.6708    1.0011    ⋯
+    ##            Z    0.0760    0.0346    0.0012    761.3074   691.4465    1.0016    ⋯
+    ## 
+    ##                                                                 1 column omitted
+    ## 
+    ## Quantiles
+    ## 
+    ##   parameters      2.5%     25.0%     50.0%     75.0%     97.5%
+    ##       Symbol   Float64   Float64   Float64   Float64   Float64
+    ## 
+    ##            n    0.0000    3.0000    6.0000   11.0000   24.0000
+    ##        sigma    0.2320    0.4870    0.7313    1.2140    3.5066
+    ##            r    0.0004    0.1055    0.6876    2.6500   16.6436
+    ##            c    1.1291    3.0548    5.6848   10.8309   45.1926
+    ##        icept   -8.7725   -3.1818   -1.5062   -0.1721    2.8281
+    ##            Z    0.0320    0.0534    0.0699    0.0891    0.1762
+    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 4.328524799711752
+    ## Design objective value: 4.348121956898375
     ## Writing design ...
 
 ### Round 1
@@ -742,33 +780,51 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round1/data.csv --odir round1 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.12.7+0.aarch64.apple.darwin14. You currently have `1.11.6+0.aarch64.apple.darwin14` installed. Run:
-    ## 
-    ##   juliaup update
-    ## 
-    ## in your terminal shell to install Julia 1.12.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=2.7801502773215154
+    ## Found xi=4.402499130378542
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Summary Statistics
-    ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64       Missing
+    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
     ## 
-    ##            n    6.8590    6.5356    0.3155   560.0929   336.9625    0.9998       missing
-    ##        sigma    1.0709    1.0981    0.0344   957.9103   951.0282    1.0012       missing
-    ##            r    1.5076    4.5073    0.1542   907.7517   784.3565    1.0035       missing
-    ##            c   10.5533   18.6193    0.6269   816.1095   816.2143    1.0016       missing
-    ##        icept   -3.2248    2.4428    0.0811   924.5195   918.9991    1.0027       missing
-    ##            Z    0.0790    0.0391    0.0014   753.8751   441.0606    1.0013       missing
+    ## Iterations        = 1:1:500
+    ## Number of chains  = 2
+    ## Samples per chain = 500
+    ## parameters        = n, sigma, r, c, icept, Z
+    ## 
+    ## Summary Statistics
+    ## 
+    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat    ⋯
+    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64    ⋯
+    ## 
+    ##            n    7.2440    6.4248    0.2702    599.3479   777.5930    1.0026    ⋯
+    ##        sigma    1.2064    1.9002    0.0570   1090.8130   829.3528    0.9991    ⋯
+    ##            r    1.5445    2.8284    0.0955    866.6980   877.3446    1.0030    ⋯
+    ##            c    9.2009   11.3713    0.3481   1106.7804   964.9872    0.9986    ⋯
+    ##        icept   -2.9342    2.2011    0.0735    822.0807   912.6107    1.0005    ⋯
+    ##            Z    0.0681    0.0289    0.0011    635.7887   710.0038    1.0005    ⋯
+    ## 
+    ##                                                                 1 column omitted
+    ## 
+    ## Quantiles
+    ## 
+    ##   parameters      2.5%     25.0%     50.0%     75.0%     97.5%
+    ##       Symbol   Float64   Float64   Float64   Float64   Float64
+    ## 
+    ##            n    0.0000    2.0000    6.0000   11.0000   24.0000
+    ##        sigma    0.2306    0.4740    0.7302    1.2736    6.2857
+    ##            r    0.0011    0.0946    0.5140    1.7768    9.6025
+    ##            c    1.3196    3.2842    5.5364   10.6165   36.7292
+    ##        icept   -8.8650   -3.7666   -2.4301   -1.4431   -0.3395
+    ##            Z    0.0255    0.0492    0.0623    0.0810    0.1393
+    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.243032624376518
+    ## Design objective value: 3.589236853583767
     ## Writing design ...
 
 Compute position PIPS
@@ -800,33 +856,51 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round2/data.csv --odir round2 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.12.7+0.aarch64.apple.darwin14. You currently have `1.11.6+0.aarch64.apple.darwin14` installed. Run:
-    ## 
-    ##   juliaup update
-    ## 
-    ## in your terminal shell to install Julia 1.12.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.2672435475581976
+    ## Found xi=3.1641711248975737
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Summary Statistics
-    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64       Missing
+    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
     ## 
-    ##            n    8.6580    6.6163    0.2858    568.2013   702.2172    1.0038       missing
-    ##        sigma    1.1319    1.7236    0.0537   1012.4827   953.9757    0.9984       missing
-    ##            r    1.8195    3.2477    0.1430    746.8275   530.2626    1.0005       missing
-    ##            c    9.1333    9.4552    0.3141    892.7934   898.7180    0.9995       missing
-    ##        icept   -3.8879    2.2578    0.0779    842.1812   946.1266    0.9984       missing
-    ##            Z    0.0667    0.0323    0.0011    766.7738   947.2014    1.0043       missing
+    ## Iterations        = 1:1:500
+    ## Number of chains  = 2
+    ## Samples per chain = 500
+    ## parameters        = n, sigma, r, c, icept, Z
+    ## 
+    ## Summary Statistics
+    ## 
+    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
+    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64   ⋯
+    ## 
+    ##            n    7.6790    6.3434    0.3091    603.5699    433.4688    1.0044   ⋯
+    ##        sigma    1.2482    2.6716    0.0822    884.3329    765.6434    0.9985   ⋯
+    ##            r    0.8308    1.6066    0.0498   1057.2448   1030.1006    0.9992   ⋯
+    ##            c   11.2987   13.2012    0.4292    893.2933    936.9296    1.0011   ⋯
+    ##        icept   -3.8464    2.3625    0.0860    819.5100    854.2453    0.9983   ⋯
+    ##            Z    0.0712    0.0330    0.0011    931.7134    941.7202    0.9991   ⋯
+    ## 
+    ##                                                                 1 column omitted
+    ## 
+    ## Quantiles
+    ## 
+    ##   parameters      2.5%     25.0%     50.0%     75.0%     97.5%
+    ##       Symbol   Float64   Float64   Float64   Float64   Float64
+    ## 
+    ##            n    1.0000    4.0000    6.0000   10.0000   24.0250
+    ##        sigma    0.2365    0.4668    0.7296    1.2510    4.9469
+    ##            r    0.0006    0.0517    0.2369    0.9283    5.0831
+    ##            c    1.8110    4.3477    7.0492   13.6488   44.7124
+    ##        icept   -9.9633   -4.9022   -3.1962   -2.2347   -0.9200
+    ##            Z    0.0000    0.0527    0.0669    0.0866    0.1510
+    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.9173175160596294
+    ## Design objective value: 3.6216314793974274
     ## Writing design ...
 
 Compute position PIPS
@@ -858,33 +932,51 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round3/data.csv --odir round3 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.12.7+0.aarch64.apple.darwin14. You currently have `1.11.6+0.aarch64.apple.darwin14` installed. Run:
-    ## 
-    ##   juliaup update
-    ## 
-    ## in your terminal shell to install Julia 1.12.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.2791185181298044
+    ## Found xi=3.4705535971595776
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Summary Statistics
-    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64       Missing
+    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
     ## 
-    ##            n    7.3990    5.1879    0.2044    687.6921    727.9185    0.9995       missing
-    ##        sigma    1.2988    2.1643    0.0676   1027.1419    909.8420    0.9992       missing
-    ##            r    0.7144    1.6032    0.0516    992.8708    881.2848    0.9998       missing
-    ##            c   10.5773   10.9102    0.3579    813.2091   1029.8589    0.9995       missing
-    ##        icept   -4.1484    2.4308    0.1055    519.9542    718.8330    1.0013       missing
-    ##            Z    0.0699    0.0342    0.0011    849.3589    722.1475    1.0006       missing
+    ## Iterations        = 1:1:500
+    ## Number of chains  = 2
+    ## Samples per chain = 500
+    ## parameters        = n, sigma, r, c, icept, Z
+    ## 
+    ## Summary Statistics
+    ## 
+    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
+    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64   ⋯
+    ## 
+    ##            n    7.3770    5.2165    0.2147    502.4948    590.1907    0.9988   ⋯
+    ##        sigma    1.2022    1.9340    0.0599   1008.9718    948.0836    0.9984   ⋯
+    ##            r    0.5887    1.1869    0.0379    899.4648   1016.2606    0.9997   ⋯
+    ##            c   10.3113   11.4376    0.3787    880.1297    923.4503    0.9993   ⋯
+    ##        icept   -4.6718    2.6202    0.1121    538.4919    868.9468    1.0008   ⋯
+    ##            Z    0.0687    0.0314    0.0011    783.3491    909.5722    0.9998   ⋯
+    ## 
+    ##                                                                 1 column omitted
+    ## 
+    ## Quantiles
+    ## 
+    ##   parameters       2.5%     25.0%     50.0%     75.0%     97.5%
+    ##       Symbol    Float64   Float64   Float64   Float64   Float64
+    ## 
+    ##            n     1.0000    4.0000    6.0000   10.0000   20.0000
+    ##        sigma     0.2273    0.4649    0.7211    1.2977    4.4619
+    ##            r     0.0002    0.0330    0.1885    0.6383    3.3212
+    ##            c     1.7219    4.2439    7.2999   12.7610   33.3603
+    ##        icept   -11.1544   -6.1086   -4.1185   -2.7743   -1.0304
+    ##            Z     0.0000    0.0518    0.0650    0.0842    0.1442
+    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 2.965591761054882
+    ## Design objective value: 2.7121710027584403
     ## Writing design ...
 
 Compute position PIPS
@@ -916,33 +1008,51 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round4/data.csv --odir round4 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.12.7+0.aarch64.apple.darwin14. You currently have `1.11.6+0.aarch64.apple.darwin14` installed. Run:
-    ## 
-    ##   juliaup update
-    ## 
-    ## in your terminal shell to install Julia 1.12.7+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=4.214484296593688
+    ## Found xi=4.512610019541585
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
-    ## Summary Statistics
-    ##   parameters      mean       std      mcse   ess_bulk    ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64    Float64     Float64   Float64       Missing
+    ## Chains MCMC chain (500×6×2 Array{Float64, 3}):
     ## 
-    ##            n    8.3620    4.8040    0.2070   587.8173    645.7241    0.9990       missing
-    ##        sigma    1.2541    1.6005    0.0536   976.0123    983.4306    0.9997       missing
-    ##            r    0.6961    1.4386    0.0460   998.8294    905.5713    0.9999       missing
-    ##            c   12.9471   12.4813    0.4147   922.6661    869.0542    1.0062       missing
-    ##        icept   -6.8430    3.2309    0.1062   924.5306   1016.6966    1.0004       missing
-    ##            Z    0.0600    0.0284    0.0010   889.5758   1002.1309    1.0020       missing
+    ## Iterations        = 1:1:500
+    ## Number of chains  = 2
+    ## Samples per chain = 500
+    ## parameters        = n, sigma, r, c, icept, Z
+    ## 
+    ## Summary Statistics
+    ## 
+    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
+    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64   ⋯
+    ## 
+    ##            n    8.9160    5.0777    0.2221    551.5677    564.0845    1.0011   ⋯
+    ##        sigma    1.3896    3.0045    0.1110   1082.8184    929.8503    1.0010   ⋯
+    ##            r    0.6942    1.5269    0.0507    981.0559   1037.7857    1.0000   ⋯
+    ##            c   13.8678   13.2470    0.4230    914.3102   1076.2587    0.9985   ⋯
+    ##        icept   -7.5880    3.3401    0.1228    743.1112    900.7765    0.9987   ⋯
+    ##            Z    0.0576    0.0265    0.0010    662.9775    915.1700    0.9994   ⋯
+    ## 
+    ##                                                                 1 column omitted
+    ## 
+    ## Quantiles
+    ## 
+    ##   parameters       2.5%     25.0%     50.0%     75.0%     97.5%
+    ##       Symbol    Float64   Float64   Float64   Float64   Float64
+    ## 
+    ##            n     2.0000    5.0000    8.0000   11.0000   22.0000
+    ##        sigma     0.2396    0.4745    0.7255    1.3083    6.1844
+    ##            r     0.0003    0.0407    0.1997    0.7232    4.4692
+    ##            c     2.5321    6.2428   10.3286   17.1735   43.0508
+    ##        icept   -15.1601   -9.5743   -6.9759   -5.2701   -2.3826
+    ##            Z     0.0000    0.0461    0.0582    0.0714    0.1138
+    ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 2.080955483572817
+    ## Design objective value: 1.7890774758756676
     ## Writing design ...
 
 Compute position PIPS
@@ -961,9 +1071,9 @@ Manhattan plot for round 4:
 
 ![](tutorial_files/figure-markdown_strict/unnamed-chunk-35-1.png) After
 round 4, representing a total of 68 (64 + 4) isolates both causal loci,
-*parC* and *gyrA*, were identified with high confidence
-(*P**I**P* &gt; 0.9). This makes it clear that variants in both loci are
-required to achieve high-level resistance.
+*parC* and *gyrA*, were identified with high confidence (PIP $ &gt;
+0.9$). This makes it clear that variants in both loci are required to
+achieve high-level resistance.
 
 Let’s see if the the unitig-level PIPs are now more precise.
 
@@ -982,11 +1092,11 @@ Inspect *parC* variants
     ## # A tibble: 137 × 8
     ##   variant      contig locus   down     up pattern_id     PIP
     ##   <chr>        <chr>  <chr>  <dbl>  <dbl>      <dbl>   <dbl>
-    ## 1 ACCATCCGCAC… WHO_N  parC  196786 196830       5780 0.943  
-    ## 2 ACAGTTCCGCC… WHO_G  parC  196033 196065       1427 0.0197 
-    ## 3 TTTTGGGTAAA… WHO_N  parC  196801 196842       3554 0.00345
-    ## 4 TTCGGACAACA… WHO_N  parC  196649 196709       8139 0.00298
-    ## 5 GGCGGCGATGC… WHO_N  parC  196659 196709       1425 0.00295
+    ## 1 ACCATCCGCAC… WHO_N  parC  196786 196830       5780 0.986  
+    ## 2 TTTTGGGTAAA… WHO_N  parC  196801 196842       3554 0.00676
+    ## 3 GGCGGCGATGC… WHO_N  parC  196659 196709       1425 0.00212
+    ## 4 GCCGTGCCTGA… WHO_N  parC  197135 197165       2133 0.00167
+    ## 5 GGTGATGACCG… WHO_N  parC  195082 195134       1281 0.00156
     ## # ℹ 132 more rows
 
 The variants mapping to *parC* are dominated by a single unitig mapping
@@ -1004,13 +1114,13 @@ Inspect *gyrA* variants
         print(n = 5, max_extra_cols = 0,width=60)
 
     ## # A tibble: 217 × 8
-    ##   variant       contig locus   down     up pattern_id    PIP
-    ##   <chr>         <chr>  <chr>  <dbl>  <dbl>      <dbl>  <dbl>
-    ## 1 TCATCGGTAAAT… WHO_N  gyrA  996715 996756       2055 0.626 
-    ## 2 CGGTAAATACCA… WHO_N  gyrA  996719 996756       8603 0.131 
-    ## 3 TCATCGGTAAAT… WHO_N  gyrA  996715 996748       5753 0.122 
-    ## 4 GACACCATCGTC… WHO_N  gyrA  996756 996787       1507 0.0353
-    ## 5 ACCACCCCCACG… WHO_N  gyrA  996727 996782       9393 0.0315
+    ##   variant      contig locus   down     up pattern_id     PIP
+    ##   <chr>        <chr>  <chr>  <dbl>  <dbl>      <dbl>   <dbl>
+    ## 1 TCATCGGTAAA… WHO_N  gyrA  996715 996756       2055 0.656  
+    ## 2 TCATCGGTAAA… WHO_N  gyrA  996715 996748       5753 0.162  
+    ## 3 CGGTAAATACC… WHO_N  gyrA  996719 996756       8603 0.155  
+    ## 4 ACCACCCCCAC… WHO_N  gyrA  996727 996782       9393 0.0127 
+    ## 5 GACACCATCGT… WHO_N  gyrA  996756 996787       1507 0.00920
     ## # ℹ 212 more rows
 
 The variants mapping to *gyrA* are dominated by a handful of strongly
