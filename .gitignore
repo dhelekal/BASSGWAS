@@ -51,3 +51,4 @@ rsconnect/
 /docs/gwas_inputs
 /docs/round*
 /docs/gwas_outputs_
+*Manifest.toml

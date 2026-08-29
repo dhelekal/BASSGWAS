@@ -1,3 +1,17 @@
+# Copyright (C) 2025–2026 David Helekal
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
 # Cache structure for rank 1 updates to the matrix X1'X0
 mutable struct QCache{Ti, Tm, Tn}
     i1_set::Ti #active indices
