@@ -78,6 +78,10 @@ function next_step!(samp::ProbitBVSSampler)
     if samp.T > samp.nadapt 
         samp.isadapted = true
     end
+    
+    n_active = sum(samp.wTGSState.γ)
+    n_active >= 100 &&
+        @warn "Warning: The number of active variants has exceed 100. Number of active variants: $(n_active). If this warning appears repeatedly, the model is likely misspecified, or there is unmeasured confounding present!"
 end
 
 function gibbs_CG!(samp::ProbitBVSSampler)

@@ -156,7 +156,8 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     Ainv = inv(AChol)
 
     FX1 = scache.FX[:,idx1_icept]
-    FX0 = scache.FX[:,idx0]
+    #FX0 = scache.FX[:,idx0]
+    FX0 = copy(scache.FX[:,idx0]')
     sqX0 = scache.sqX[idx0]
 
     qterm = scache.qterm
@@ -177,7 +178,7 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
 end
 
 
-function _inc_up2!(ssq, dets, c, AChol, QX1, QX0, FX1, FX0, X1tX0, sqX0, sinv)
+function _inc_up2!(ssq, dets, c, AChol, QX1, QX0, FX1, W, X1tX0, sqX0, sinv) #FX0, X1tX0, sqX0, sinv)
     ## Determinant Updates
     # x_i' Cinv x_i forall i
 
@@ -186,7 +187,7 @@ function _inc_up2!(ssq, dets, c, AChol, QX1, QX0, FX1, FX0, X1tX0, sqX0, sinv)
 
     U = AChol.U' \ FX1' # p x 1
     quad_term = -dot(U,U) 
-    W = copy(FX0')
+    #W = copy(FX0')
 
     AinvBs = copy(X1tX0)
     
