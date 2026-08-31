@@ -26,6 +26,9 @@ using Random
 using StatsBase
 using UnPack
 
+include("logging.jl")
+export compPerf
+
 include("utils.jl")
 include("ParState.jl")
 include("SCache.jl")

@@ -35,9 +35,11 @@ function flip_gamma!(state, ps, qcache, to_flip)
     paug = state.p+1
     idx1_icept = [idx1; paug]
     if newg == 1
-        add_active_QC(qcache, ps, to_flip, idx1_icept, idx0)
+        t= @elapsed add_active_QC(qcache, ps, to_flip, idx1_icept, idx0)
+        perf!("flip.add", t)
     else
-        remove_active_QC(qcache, ps, to_flip, idx1_icept, idx0)
+        t= @elapsed remove_active_QC(qcache, ps, to_flip, idx1_icept, idx0)
+        perf!("flip.remove", t)
     end 
 end
 
@@ -93,11 +95,14 @@ function update_state2!(state, ps, scache, qcache, loglik::Aloglik)
     idx0 = findall(γ .== 0)
     idx1 = findall(γ .== 1)
 
-    det_curr, ssq_curr = comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
+    t = @elapsed det_curr, ssq_curr = comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
+    perf!("upstate.up", t)
     state.ll_curr = loglik(det_curr, ssq_curr)
-    comp_llrs!(llrs, dets, ssq, state.ll_curr, idx1, idx0, p, loglik, alpha, beta)
-    comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
-    
+    t = @elapsed comp_llrs!(llrs, dets, ssq, state.ll_curr, idx1, idx0, p, loglik, alpha, beta)
+    perf!("upstate.llr", t)
+    t = @elapsed comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
+    perf!("upstate.rate", t)
+
     rates[p+1] = xi
     _ = cumsum!(rsums, rates)
 end
@@ -154,7 +159,8 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     d = length(idx1_icept)
 
     QX1 = scache.QX[:, idx1_icept]
-    QX0 = _copy_excl(scache.QX, idx1_icept) 
+    t=@elapsed QX0 = _copy_excl(scache.QX, idx1_icept) 
+    perf!("upstate.up.qx0", t)
 
     X1 = get_X1(qcache)
     X1tX0 = get_XtX(qcache)
@@ -171,19 +177,25 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
 
     FX1 = scache.FX[:,idx1_icept]
     #FX0 = scache.FX[:,idx0]
-    FX0 = copy(scache.FX[:,idx0]')
-    sqX0 = scache.sqX[idx0]
+    t=@elapsed FX0 = copy(scache.FX[:,idx0]')
+    perf!("upstate.up.fx0", t)
+    t=@elapsed sqX0 = scache.sqX[idx0]
+    perf!("upstate.up.sqx0", t)
 
     qterm = scache.qterm
-    ssq_curr = -(FX1 * Ainv * FX1') + qterm
+    t = @elapsed ssq_curr = -(FX1 * Ainv * FX1') + qterm
+    perf!("upstate.up.ssq", t)
     det_curr = logabsdet(AChol)[1]
     det_curr += scache.cdet + (d-1)*log(c) + log(mc)
 
-    _inc_up2!(view(ssq, idx0), view(dets, idx0),
+    t = @elapsed _inc_up2!(view(ssq, idx0), view(dets, idx0),
         c, AChol, QX1, QX0, FX1, FX0, X1tX0, sqX0, sinv)
+    perf!("upstate.up.up2", t)
 
-    _inc_down2!(view(ssq, idx1), view(dets, idx1), 
+
+    t = @elapsed _inc_down2!(view(ssq, idx1), view(dets, idx1), 
         c, Ainv, X1CinvX1, FX1)
+    perf!("upstate.up.down2", t)
 
     ssq .+= qterm# + ssq_curr
     dets .+= det_curr

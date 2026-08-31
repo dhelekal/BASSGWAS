@@ -194,7 +194,7 @@ We will now use the script to preprocess the toy data. To speed up
 inference for the purposes of this tutorial, we will retain only 90% of
 the variance
 
-    Rapp ../helper_scripts/prepare_data.R ../sample_data/variants.rtab ../sample_data/tree.tre --odir gwas_inputs --svd_threshold 0.9
+    Rapp ../helper_scripts/prepare_data.R ../sample_data/variants.rtab ../sample_data/tree.tre --odir gwas_inputs --svd_threshold 0.99
 
 This will generate the following input files in an gwas\_inputs
 subdirectory.
@@ -394,27 +394,49 @@ We’re now ready to run BASSGWAS sampling. As the toy dataset only
 contains 20000 variants, this should only take a few minutes.
 
     mkdir gwas_outputs
-    julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile gwas_inputs/data200.csv --odir gwas_outputs --batchsz 0 --ndraws 500 --nthin 250 --nchains 2
+    julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile gwas_inputs/data200.csv --odir gwas_outputs --batchsz 0 --ndraws 500 --nthin 250 --nchains 1
 
+    ## mkdir: gwas_outputs: File exists
     ## Adding worker processes ...
     ## Done
+    ## Precompiling packages...
+    ##    1881.4 ms  ✓ BASSGWAS
+    ##   1 dependency successfully precompiled in 2 seconds. 101 already precompiled.
+    ##   73 dependencies precompiled but different versions are currently loaded (Accessors, Accessors → LinearAlgebraExt, Adapt, Adapt → AdaptSparseArraysExt, AliasTables, ArrayInterface, ArrayInterface → ArrayInterfaceFillArraysExt, ArrayInterface → ArrayInterfaceSparseArraysExt, Base64, CommonSolve, Compat, Compat → CompatLinearAlgebraExt, CompilerSupportLibraries_jll, CompositionsBase, CompositionsBase → CompositionsBaseInverseFunctionsExt, ConstructionBase, ConstructionBase → ConstructionBaseLinearAlgebraExt, DataAPI, DataStructures, Dates, Distributions, DocStringExtensions, FillArrays, FillArrays → FillArraysPDMatsExt, FillArrays → FillArraysSparseArraysExt, FillArrays → FillArraysStatisticsExt, Gamma, HypergeometricFunctions, InteractiveUtils, InverseFunctions, InverseFunctions → InverseFunctionsDatesExt, IrrationalConstants, JLLWrappers, JuliaSyntaxHighlighting, LogExpFunctions, LogExpFunctions → LogExpFunctionsInverseFunctionsExt, Logging, MacroTools, Markdown, Missings, OffsetArrays, OffsetArrays → OffsetArraysAdaptExt, OpenLibm_jll, OpenSpecFun_jll, OrderedCollections, PDMats, PDMats → StatsBaseExt, PrecompileTools, Preferences, Printf, PtrArrays, QuadGK, Reexport, Rmath, Rmath_jll, Roots, Serialization, SortingAlgorithms, SparseArrays, SpecialFunctions, Statistics, Statistics → SparseArraysExt, StatsAPI, StatsBase, StatsFuns, StatsFuns → StatsFunsInverseFunctionsExt, StyledStrings, SuiteSparse, SuiteSparse_jll, TOML, UUIDs, UnPack and Unicode). Restart julia to access the new versions. Otherwise, 24 dependents of these packages may trigger further precompilation to work with the unexpected versions.
     ## Adapting xi ...
-    ## Found xi=3.5474546959099564
+    ## Found xi=4.748607283514716
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
+    ## time upstate.up.sqx0 : 1.1003997678142489e-5
+    ## time upstate.up.down2 : 8.478938991192937e-6
+    ## time flip : 0.0004937890114080491
+    ## time upstate.up.fx0 : 1.6392609047237676e-5
+    ## time upstate.llr : 4.496530176140953e-5
+    ## time betas : 0.00022541295831955018
+    ## time upstate.up.qx0 : 0.0018901281887109577
+    ## time upstate.up.ssq : 2.3229399519614267e-7
+    ## time flip.remove : 0.0002965284148868683
+    ## time ggibs.sc : 0.0005942066728415477
+    ## time upstate.up : 0.0027483317074459557
+    ## time gibbs : 0.0010373446218987757
+    ## time nextstep : 0.003544230292153724
+    ## time upstate : 0.002915139945636489
+    ## time upstate.up.up2 : 0.0008061849481184921
+    ## time upstate.rate : 7.723486725380345e-5
+    ## time flip.add : 0.0006043073566905861
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
     ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   e ⋯
     ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64     ⋯
     ## 
-    ##            n    6.8120    4.5709    0.2399   386.1948   455.3415    1.0103     ⋯
-    ##        sigma    1.0800    1.2193    0.0376   974.3384   736.7259    1.0000     ⋯
-    ##            r    0.8860    1.5298    0.0578   735.7150   680.3518    1.0025     ⋯
-    ##            c   11.9975   13.3147    0.4610   621.6985   802.9035    1.0031     ⋯
-    ##        icept   -5.1359    2.4287    0.1577   247.6430   665.9075    1.0253     ⋯
-    ##            Z    0.0701    0.0352    0.0012   802.5125   856.3953    1.0048     ⋯
+    ##            n    6.9020    4.2209    0.3088   178.5867   266.3518    1.0134     ⋯
+    ##        sigma    1.0376    1.0656    0.0539   421.4509   407.3927    1.0037     ⋯
+    ##            r    0.8098    1.4799    0.1075   216.8281   309.2494    1.0119     ⋯
+    ##            c   14.0406   15.5849    0.9285   233.6896   331.3647    1.0112     ⋯
+    ##        icept   -5.2739    2.4683    0.2223   125.8603   231.6260    1.0239     ⋯
+    ##            Z    0.0645    0.0294    0.0015   348.5206   461.6350    0.9988     ⋯
     ## 
     ##                                                                 1 column omitted
     ## Saving draws ...
@@ -423,7 +445,7 @@ contains 20000 variants, this should only take a few minutes.
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.45743828614553 minutes."
+    ## [1] "Run time: 10.3994185487429 minutes."
 
 When using BASSGWAS with real data using up to 4 threads per chain is
 recommended. We recommend running chains for 500 × 1000 iterations.
@@ -467,10 +489,13 @@ BASS-GWAS saves the posterior draws into the `gwas_outputs` directory:
 
     ## b_draws.csv
     ## gamma_draws.csv
+    ## locus_pips.csv
     ## par_draws.csv
     ## pip_draws.csv
+    ## position_pips.csv
     ## receipt.txt
     ## u_draws.csv
+    ## variant_pips.csv
     ## Y_draws.csv
 
 -   `b_draws.csv` variant coefficient draws
@@ -611,13 +636,13 @@ while limiting reference bias
         print(n = 5, max_extra_cols = 0, width=60)
 
     ## # A tibble: 3,600 × 2
-    ##   group     PIP
-    ##   <chr>   <dbl>
-    ## 1 gyrA   0.784 
-    ## 2 parC   0.428 
-    ## 3 piiC_2 0.0847
-    ## 4 piiC_3 0.0812
-    ## 5 tbpB_2 0.0778
+    ##   group               PIP
+    ##   <chr>             <dbl>
+    ## 1 gyrA              0.676
+    ## 2 parC              0.511
+    ## 3 SRR16999462_00492 0.175
+    ## 4 piiC_3            0.122
+    ## 5 WHO_N.55          0.119
     ## # ℹ 3,595 more rows
 
 Based on these two summaries we can see that there are two peaks at the
@@ -661,16 +686,16 @@ mapping to *gyrA* and display the top 5.
     ## # A tibble: 217 × 8
     ##    variant     contig locus   down     up pattern_id     PIP
     ##    <chr>       <chr>  <chr>  <dbl>  <dbl>      <dbl>   <dbl>
-    ##  1 TCATCGGTAA… WHO_N  gyrA  996715 996748       5753 0.326  
-    ##  2 TCATCGGTAA… WHO_N  gyrA  996715 996756       2055 0.305  
-    ##  3 CGGTAAATAC… WHO_N  gyrA  996719 996756       8603 0.0669 
-    ##  4 TACGACACCA… WHO_G  gyrA  995790 995822       4659 0.0295 
-    ##  5 ACCACCCCCA… WHO_N  gyrA  996727 996782       9393 0.0230 
-    ##  6 GACACCATCG… WHO_N  gyrA  996756 996787       1507 0.0141 
-    ##  7 ACCACCCCCA… WHO_N  gyrA  996727 996775       2687 0.0141 
-    ##  8 CGCAGTTTAC… WHO_N  gyrA  996746 996787       7414 0.00291
-    ##  9 AAGGGTTACG… gnl|X… gyrA     136    168       7275 0.00284
-    ## 10 GCTTGGGCGG… WHO_N  gyrA  997171 997231       8636 0.00222
+    ##  1 TCATCGGTAA… WHO_N  gyrA  996715 996756       2055 0.274  
+    ##  2 TCATCGGTAA… WHO_N  gyrA  996715 996748       5753 0.258  
+    ##  3 ACCACCCCCA… WHO_N  gyrA  996727 996775       2687 0.0410 
+    ##  4 CGGTAAATAC… WHO_N  gyrA  996719 996756       8603 0.0363 
+    ##  5 GACACCATCG… WHO_N  gyrA  996756 996787       1507 0.0266 
+    ##  6 TACGACACCA… WHO_G  gyrA  995790 995822       4659 0.0248 
+    ##  7 AAAAATACAA… gnl|X… gyrA     139    169       2216 0.0106 
+    ##  8 TAACAGGCGC… WHO_N  gyrA  997475 997535       9351 0.00637
+    ##  9 CTATATATAG… WHO_N  gyrA  999299 999332        149 0.00347
+    ## 10 TTCAAAGGAA… gnl|X… gyrA    5758   5790       9112 0.00266
     ## # ℹ 207 more rows
 
 # Adaptive experimental design
@@ -706,36 +731,9 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round0/data.csv --odir round0 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## Adding worker processes ...
-    ## Done
-    ## Adapting xi ...
-    ## Found xi=2.854208944316965
-    ## Running parallel chains ...
-    ## Done
-    ## Processing draws ...
-    ## Tempered distribution diagnostics:
-    ## Summary Statistics
-    ## 
-    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat    ⋯
-    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64    ⋯
-    ## 
-    ##            n    7.5980    6.6832    0.2758    701.8529   689.1893    1.0008    ⋯
-    ##        sigma    1.4246   11.8817    0.3813   1012.9606   916.9188    1.0000    ⋯
-    ##            r    2.6950    6.3460    0.2016   1095.2376   985.3725    1.0027    ⋯
-    ##            c    9.6662   13.6617    0.4135   1016.7319   978.1122    0.9996    ⋯
-    ##        icept   -1.9056    2.8864    0.0942    906.7984   997.6708    1.0011    ⋯
-    ##            Z    0.0760    0.0346    0.0012    761.3074   691.4465    1.0016    ⋯
-    ## 
-    ##                                                                 1 column omitted
-    ## Saving draws ...
-    ## Done
-    ## Designing next experiment ...
-    ## Design objective value: 4.348121956898375
-    ## Writing design ...
-
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 3.65493578513463 minutes."
+    ## [1] "Run time: 4.14689381917318e-05 minutes."
 
 ### Round 1
 
@@ -750,36 +748,9 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round1/data.csv --odir round1 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## Adding worker processes ...
-    ## Done
-    ## Adapting xi ...
-    ## Found xi=4.402499130378542
-    ## Running parallel chains ...
-    ## Done
-    ## Processing draws ...
-    ## Tempered distribution diagnostics:
-    ## Summary Statistics
-    ## 
-    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat    ⋯
-    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64    ⋯
-    ## 
-    ##            n    7.2440    6.4248    0.2702    599.3479   777.5930    1.0026    ⋯
-    ##        sigma    1.2064    1.9002    0.0570   1090.8130   829.3528    0.9991    ⋯
-    ##            r    1.5445    2.8284    0.0955    866.6980   877.3446    1.0030    ⋯
-    ##            c    9.2009   11.3713    0.3481   1106.7804   964.9872    0.9986    ⋯
-    ##        icept   -2.9342    2.2011    0.0735    822.0807   912.6107    1.0005    ⋯
-    ##            Z    0.0681    0.0289    0.0011    635.7887   710.0038    1.0005    ⋯
-    ## 
-    ##                                                                 1 column omitted
-    ## Saving draws ...
-    ## Done
-    ## Designing next experiment ...
-    ## Design objective value: 3.589236853583767
-    ## Writing design ...
-
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.42917079925537 minutes."
+    ## [1] "Run time: 3.74158223470052e-05 minutes."
 
 Compute position PIPS
 
@@ -810,36 +781,9 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round2/data.csv --odir round2 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## Adding worker processes ...
-    ## Done
-    ## Adapting xi ...
-    ## Found xi=3.1641711248975737
-    ## Running parallel chains ...
-    ## Done
-    ## Processing draws ...
-    ## Tempered distribution diagnostics:
-    ## Summary Statistics
-    ## 
-    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
-    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64   ⋯
-    ## 
-    ##            n    7.6790    6.3434    0.3091    603.5699    433.4688    1.0044   ⋯
-    ##        sigma    1.2482    2.6716    0.0822    884.3329    765.6434    0.9985   ⋯
-    ##            r    0.8308    1.6066    0.0498   1057.2448   1030.1006    0.9992   ⋯
-    ##            c   11.2987   13.2012    0.4292    893.2933    936.9296    1.0011   ⋯
-    ##        icept   -3.8464    2.3625    0.0860    819.5100    854.2453    0.9983   ⋯
-    ##            Z    0.0712    0.0330    0.0011    931.7134    941.7202    0.9991   ⋯
-    ## 
-    ##                                                                 1 column omitted
-    ## Saving draws ...
-    ## Done
-    ## Designing next experiment ...
-    ## Design objective value: 3.6216314793974274
-    ## Writing design ...
-
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.42771975199382 minutes."
+    ## [1] "Run time: 4.01139259338379e-05 minutes."
 
 Compute position PIPS
 
@@ -870,36 +814,9 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round3/data.csv --odir round3 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## Adding worker processes ...
-    ## Done
-    ## Adapting xi ...
-    ## Found xi=3.4705535971595776
-    ## Running parallel chains ...
-    ## Done
-    ## Processing draws ...
-    ## Tempered distribution diagnostics:
-    ## Summary Statistics
-    ## 
-    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
-    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64   ⋯
-    ## 
-    ##            n    7.3770    5.2165    0.2147    502.4948    590.1907    0.9988   ⋯
-    ##        sigma    1.2022    1.9340    0.0599   1008.9718    948.0836    0.9984   ⋯
-    ##            r    0.5887    1.1869    0.0379    899.4648   1016.2606    0.9997   ⋯
-    ##            c   10.3113   11.4376    0.3787    880.1297    923.4503    0.9993   ⋯
-    ##        icept   -4.6718    2.6202    0.1121    538.4919    868.9468    1.0008   ⋯
-    ##            Z    0.0687    0.0314    0.0011    783.3491    909.5722    0.9998   ⋯
-    ## 
-    ##                                                                 1 column omitted
-    ## Saving draws ...
-    ## Done
-    ## Designing next experiment ...
-    ## Design objective value: 2.7121710027584403
-    ## Writing design ...
-
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.34054396947225 minutes."
+    ## [1] "Run time: 4.18980916341146e-05 minutes."
 
 Compute position PIPS
 
@@ -930,36 +847,9 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round4/data.csv --odir round4 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## Adding worker processes ...
-    ## Done
-    ## Adapting xi ...
-    ## Found xi=4.512610019541585
-    ## Running parallel chains ...
-    ## Done
-    ## Processing draws ...
-    ## Tempered distribution diagnostics:
-    ## Summary Statistics
-    ## 
-    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
-    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64   ⋯
-    ## 
-    ##            n    8.9160    5.0777    0.2221    551.5677    564.0845    1.0011   ⋯
-    ##        sigma    1.3896    3.0045    0.1110   1082.8184    929.8503    1.0010   ⋯
-    ##            r    0.6942    1.5269    0.0507    981.0559   1037.7857    1.0000   ⋯
-    ##            c   13.8678   13.2470    0.4230    914.3102   1076.2587    0.9985   ⋯
-    ##        icept   -7.5880    3.3401    0.1228    743.1112    900.7765    0.9987   ⋯
-    ##            Z    0.0576    0.0265    0.0010    662.9775    915.1700    0.9994   ⋯
-    ## 
-    ##                                                                 1 column omitted
-    ## Saving draws ...
-    ## Done
-    ## Designing next experiment ...
-    ## Design objective value: 1.7890774758756676
-    ## Writing design ...
-
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.62276121775309 minutes."
+    ## [1] "Run time: 3.93827756245931e-05 minutes."
 
 Compute position PIPS
 

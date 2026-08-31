@@ -275,7 +275,7 @@ println("Found xi=$(xi)")
                 cpars_d[j, 6] = Z
             end
         end
-        return (gammas=gamma_d, pips=pips_d, cpars=cpars_d, Ys=Ys_d, betas=betas_d, us=us_d)
+        return (gammas=gamma_d, pips=pips_d, cpars=cpars_d, Ys=Ys_d, betas=betas_d, us=us_d, perf = samp.perf[1,:] ./ samp.perf[2,:])
     end
 end
 #Run parallel sampling
@@ -296,7 +296,8 @@ us_draws = zeros(Float64, (size(draws[1].us)..., nchains))
 cpars_draws = zeros(Float64, (size(draws[1].cpars)..., nchains)) 
 
 for i in 1:nchains
-    @unpack gammas, pips, cpars, Ys, betas, us = draws[i]
+    @unpack gammas, pips, cpars, Ys, betas, us, perf = draws[i]
+    compPerf()
     betas_draws[:,:, i] .= betas
     gammas_draws[:,:, i] .= gammas
     pips_draws[:,:, i] .= pips

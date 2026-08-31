@@ -12,7 +12,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-mutable struct ProbitBVSSampler{Tp, Tc, Ts, Tk, Tl, Ti, Tb, Tn, Ta, Tr}
+mutable struct ProbitBVSSampler{Tp, Tc, Ts, Tk, Tl, Ti, Tb, Tn, Ta, Tr, Tv}
     parState::Tp
     scache::Tc
     wTGSState::Ts
@@ -29,6 +29,7 @@ mutable struct ProbitBVSSampler{Tp, Tc, Ts, Tk, Tl, Ti, Tb, Tn, Ta, Tr}
     shape::Tn
     scale::Tn
     rng::Tr
+    perf::Tv
 end
 
 function ProbitBVSSampler(X::AbstractMatrix{Tx}, Y::AbstractVector{Ty}, U::AbstractMatrix{Tx}, S::AbstractVector{Tx},
@@ -64,18 +65,23 @@ function ProbitBVSSampler(X::AbstractMatrix{Tx}, Y::AbstractVector{Ty}, U::Abstr
 
     updateSCache!(cache, parState)
     update_state2!(tgsstate, parState, cache, qcache, loglik)
-    return ProbitBVSSampler(parState, cache, tgsstate, qcache, loglik, 0, 0, nadapt, !adapt_xi, adapt_xi, xi_targ, sample_c, adaptor, shape, scale, rng)
+    return ProbitBVSSampler(parState, cache, tgsstate, qcache, loglik, 0, 0, nadapt, !adapt_xi, adapt_xi, xi_targ, sample_c, adaptor, shape, scale, rng, zeros(2,5))
 end
 
 function next_step!(samp::ProbitBVSSampler)
-    if samp.T > 10
+    t = @elapsed if samp.T > 10
+        activatePerf()
         next_flip = sample_next2(samp.wTGSState, samp.rng)
         if next_flip <= samp.parState.p
-            flip_gamma!(samp.wTGSState, samp.parState, samp.qcache, next_flip)
-            update_state2!(samp.wTGSState, samp.parState, samp.scache, samp.qcache, samp.loglik)
+            t = @elapsed flip_gamma!(samp.wTGSState, samp.parState, samp.qcache, next_flip)
+            perf!("flip", t)
+            t = @elapsed update_state2!(samp.wTGSState, samp.parState, samp.scache, samp.qcache, samp.loglik)
+            perf!("upstate", t)
         else
-            gibbs_CG!(samp)
-            update_state2!(samp.wTGSState, samp.parState, samp.scache, samp.qcache, samp.loglik)
+            t = @elapsed gibbs_CG!(samp)
+            perf!("gibbs", t)
+            t = @elapsed update_state2!(samp.wTGSState, samp.parState, samp.scache, samp.qcache, samp.loglik)
+            perf!("upstate", t)
         end
         #Adapt xi
         if !samp.isadapted && samp.adapt_xi
@@ -85,14 +91,18 @@ function next_step!(samp::ProbitBVSSampler)
             samp.wTGSState.xi = xi + (xi_targ - xi/rs)/(sqrt(samp.T))
         end
     else
-        gibbs_CG!(samp)
-        update_state2!(samp.wTGSState, samp.parState, samp.scache, samp.qcache, samp.loglik)
+        t = @elapsed gibbs_CG!(samp)
+        perf!("gibbs", t)
+        t = @elapsed update_state2!(samp.wTGSState, samp.parState, samp.scache, samp.qcache, samp.loglik)
+        perf!("upstate", t)
+
     end
     samp.T += 1
     if samp.T > samp.nadapt 
         samp.isadapted = true
     end
-    
+    perf!("nextstep", t)
+
     n_active = sum(samp.wTGSState.γ)
     n_active >= 100 &&
         @warn "Warning: The number of active variants has exceed 100. Number of active variants: $(n_active). If this warning appears repeatedly, the model is likely misspecified, or there is unmeasured confounding present!"
@@ -186,7 +196,8 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         _ = draw_Ysigma!(Y_old, r_new, c_new, mc, shape, scale, X, XtX, UtX, U, S, rng)
     end
 
-    beta = draw_betas(Y_old, r_new, c_new, mc, l, m, K, rng)
+    t = @elapsed beta = draw_betas(Y_old, r_new, c_new, mc, l, m, K, rng)
+    perf!("betas", t)
 
     #Y_new are Y means, to be reused
     Y_new = K*beta
@@ -232,7 +243,8 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     ps.c = c_new
     ps.r = r_new
 
-    updateSCache!(sc, ps)
+    t = @elapsed updateSCache!(sc, ps)
+    perf!("ggibs.sc", t)
 end
 
 #Draw sigma^2 | Y from a normal - inverse-gamma model and standardise Y := Y/sigma 

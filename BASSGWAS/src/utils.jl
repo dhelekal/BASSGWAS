@@ -112,14 +112,14 @@ function _copy_excl(A::AbstractMatrix, idx)
     k = 1
     for i in idx
         sp = max(i-j, 0)
-        copyto!(out, 1:m, k:(sp+k-1), A, 1:m, j:(i-1))
+        copyto!(out, 1:m, k:(sp+k-1), 'N', A, 1:m, j:(i-1))
         k = k+sp
         j = i+1
     end
 
     if n > idx[end]
         sp = max(n-j+1, 0)
-        copyto!(out, 1:m, k:(sp+k-1), A, 1:m, j:n)
+        copyto!(out, 1:m, k:(sp+k-1), 'N', A, 1:m, j:n)
     end
     return out
 end

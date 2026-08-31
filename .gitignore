@@ -52,3 +52,4 @@ rsconnect/
 /docs/round*
 /docs/gwas_outputs_
 *Manifest.toml
+/cip
