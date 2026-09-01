@@ -96,7 +96,7 @@ Rapp ../helper_scripts/prepare_data.R --help
 - `--svd_threshold` controls the fraction of variance of the original phylogenetic correlation matrix that will be retained. Default: 0.99.
 
 We will now use the script to preprocess the toy data. To speed up inference for the purposes of this tutorial, we will retain only 90% of the variance
-```{bash, warning=FALSE, message=FALSE,eval=FALSE}
+```{bash, warning=FALSE, message=FALSE,eval=TRUE}
 Rapp ../helper_scripts/prepare_data.R ../cip/variants.rtab ../cip/tree.tre --odir gwas_inputs --svd_threshold 0.99
 ```
 This will generate the following input files in an gwas_inputs subdirectory.

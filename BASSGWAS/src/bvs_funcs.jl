@@ -375,19 +375,9 @@ function comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta
     @batch for i in 1:blck_sz:n
         j = min(i+blck_sz-1,n)
         sp = i:j
-        @turbo for k in sp
-            ll = loglik(dets[k], ssq[k])
-            llrs[k] = ll - ll_curr
-        end
+        @views ll_minus_a!(llrs[sp], dets[sp], ssq[sp], ll_curr, loglik)
     end
 
-    #=for i in axes(llrs, 1)
-        ll = loglik(dets[i], ssq[i])
-        llrs[i] = ll - ll_curr
-    end=#
-
-    #current ll 
-    #ll_prev = ll_curr + prior_curr
     for i in idx1
         llrs[i] += lpr_excl
     end
@@ -402,8 +392,6 @@ function _inc_prior(γ, p, alpha, beta)
     alpha_N = γ + alpha
     beta_N = p - γ + beta
     return logbeta(alpha_N, beta_N) - logbeta(alpha, beta)
-    #q = alpha / (alpha+beta)
-    #return log(q)*γ + log(1.0-q)*(p-γ)
 end
 
 
