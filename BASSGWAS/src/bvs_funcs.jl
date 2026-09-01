@@ -154,12 +154,14 @@ end
 function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     
     paug = scache.paug
+    p = paug-1
+
     idx1_icept = [idx1; paug]
     sinv = 1.0/s
     d = length(idx1_icept)
 
     QX1 = scache.QX[:, idx1_icept]
-    t=@elapsed QX0 = _copy_excl(scache.QX, idx1_icept) 
+    t=@elapsed QX = scache.QX
     perf!("upstate.up.qx0", t)
 
     X1 = get_X1(qcache)
@@ -177,9 +179,9 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
 
     FX1 = scache.FX[:,idx1_icept]
     #FX0 = scache.FX[:,idx0]
-    t=@elapsed FX0 = copy(scache.FX[:,idx0]')
+    t=@elapsed FX = copy(scache.FX'[1:p])
     perf!("upstate.up.fx0", t)
-    t=@elapsed sqX0 = scache.sqX[idx0]
+    t=@elapsed sqX = scache.sqX[1:p]
     perf!("upstate.up.sqx0", t)
 
     qterm = scache.qterm
@@ -188,8 +190,8 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     det_curr = logabsdet(AChol)[1]
     det_curr += scache.cdet + (d-1)*log(c) + log(mc)
 
-    t = @elapsed _inc_up2!(view(ssq, idx0), view(dets, idx0),
-        c, AChol, QX1, QX0, FX1, FX0, X1tX0, sqX0, sinv)
+    t = @elapsed _inc_up2!(ssq, dets,
+        c, AChol, QX1, QX, FX1, FX, X1tX0, sqX, sinv)
     perf!("upstate.up.up2", t)
 
 
@@ -204,7 +206,7 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
 end
 
 
-function _inc_up2!(ssq, dets, c, AChol, QX1, QX0, FX1, W, X1tX0, sqX0, sinv) #FX0, X1tX0, sqX0, sinv)
+function _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, W, X1tX0, sqX, sinv) #FX0, X1tX0, sqX0, sinv)
     ## Determinant Updates
     # x_i' Cinv x_i forall i
 
@@ -218,7 +220,7 @@ function _inc_up2!(ssq, dets, c, AChol, QX1, QX0, FX1, W, X1tX0, sqX0, sinv) #FX
     AinvBs = copy(X1tX0)
     
     cinv = 1.0 / c
-    a = cinv .+ sqX0 .* sinv
+    a = cinv .+ sqX .* sinv
 
     nt = Threads.nthreads()
     blck_sz = ceil(Int64,n/nt)
@@ -229,8 +231,8 @@ function _inc_up2!(ssq, dets, c, AChol, QX1, QX0, FX1, W, X1tX0, sqX0, sinv) #FX
         _a = view(a, sp)
         _W = view(W, sp)
         _AinvBs = view(AinvBs, :, sp)
-        _QX0 = view(QX0, :, sp)
-        _up_blck2!(_a, _W, _QX0, _AinvBs, U, QX1, AChol, sinv, c, quad_term, d)
+        _QX = view(QX, :, sp)
+        _up_blck2!(_a, _W, _QX, _AinvBs, U, QX1, AChol, sinv, c, quad_term, d)
     end
 
     #a .*= -1.0
@@ -241,22 +243,24 @@ function _inc_up2!(ssq, dets, c, AChol, QX1, QX0, FX1, W, X1tX0, sqX0, sinv) #FX
     #map!((x) -> abs(x), a, a)
     #map!((x) -> log(x), a, a)
     #a .+= p*log(c)
+
+
     dets .= a
     ssq .= W
 end
 
-function _up_blck2!(a, W, QX0, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
+function _up_blck2!(a, W, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
     ## Determinant Updates
     # x_i' Cinv x_i forall i
-    @turbo for j in axes(QX0,2)
+    @turbo for j in axes(QX,2)
         s = 0.0 
-        for i in axes(QX0,1)
-            s += QX0[i,j]*QX0[i,j]
+        for i in axes(QX,1)
+            s += QX[i,j]*QX[i,j]
         end
         a[j] -= s
     end
 
-    gemm!('T', 'N', -1.0, QX1, QX0, sinv, AinvBs)
+    gemm!('T', 'N', -1.0, QX1, QX, sinv, AinvBs)
     ldiv!(AChol.U', AinvBs)
 
     @turbo for j in axes(AinvBs,2)

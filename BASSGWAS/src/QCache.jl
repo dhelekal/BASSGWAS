@@ -29,8 +29,8 @@ function QCache(ps, i1_set, i0_set)
     p = length(i0_set)
 
     X1=ps.Xaug[:, i1_set]
-    X0=ps.Xaug[:, i0_set]
-    XtX = X1'X0
+    X=ps.Xaug
+    XtX = X1'X
 
     QCache(i1_set, i0_set, X1, XtX, copy(XtX), d, p)
 end
@@ -53,27 +53,23 @@ function add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
     d_new = d+1
     p_new = p-1
 
-    i0_old = searchsortedfirst(qc.i0_set, index)
     i1_new = searchsortedfirst(i1_set_new, index)
     
     X = ps.Xaug
     qc.X1 = X[:, i1_set_new]
+    
+    m = size(qc.XtX, 2)
 
     qc.XtXb = qc.XtX
-    qc.XtX = similar(qc.XtXb, d_new, p_new)
+    qc.XtX = similar(qc.XtXb, d_new, m)
 
-    m1 = size(qc.XtX, 1)
-    n1 = size(qc.XtX, 2)
+    n1 = size(qc.XtX, 1)
+    n2 = size(qc.XtXb, 1)
 
-    m2 = size(qc.XtXb, 1)
-    n2 = size(qc.XtXb, 2)
-
-    copyto!(qc.XtX, 1:(i1_new-1), 1:(i0_old-1), qc.XtXb, 1:(i1_new-1), 1:(i0_old-1))
-    copyto!(qc.XtX, (i1_new+1):m1, 1:(i0_old-1), qc.XtXb, i1_new:m2, 1:(i0_old-1))
-    copyto!(qc.XtX, 1:(i1_new-1), i0_old:n1, qc.XtXb, 1:(i1_new-1), (i0_old+1):n2)
-    copyto!(qc.XtX, (i1_new+1):m1, i0_old:n1, qc.XtXb, i1_new:m2, (i0_old+1):n2)
-
-    @views _X1tX0_partial!(qc.XtX[i1_new, :]', X[:, index], X, i1_set_new, i0_set_new)
+    copyto!(qc.XtX, 1:(i1_new-1), 1:m, qc.XtXb,  1:(i1_new-1), 1:m)
+    @views _x1x =X[:, index]'X
+    qc.XtX[i1_new, :] .= _x1x'
+    copyto!(qc.XtX, (i1_new+1):n1, 1:m, qc.XtXb, (i1_new):n2, 1:m)
 
     qc.d=d_new
     qc.p=p_new
@@ -88,28 +84,21 @@ function remove_active_QC(qc, ps, index, i1_set_new, i0_set_new)
     d_new = d-1
     p_new = p+1
 
-    i0_new = searchsortedfirst(i0_set_new, index)
     i1_old = searchsortedfirst(qc.i1_set, index)
-
+    
     X = ps.Xaug
+    qc.X1 = X[:, i1_set_new]
+    
+    m = size(qc.XtX, 2)
 
     qc.XtXb = qc.XtX
-    qc.XtX = similar(qc.XtXb, d_new, p_new)
+    qc.XtX = similar(qc.XtXb, d_new, m)
 
+    n1 = size(qc.XtX, 1)
+    n2 = size(qc.XtXb, 1)
 
-    m1 = size(qc.XtX, 1)
-    n1 = size(qc.XtX, 2)
-
-    m2 = size(qc.XtXb, 1)
-    n2 = size(qc.XtXb, 2)
-
-    copyto!(qc.XtX, 1:(i1_old-1), 1:(i0_new-1), qc.XtXb, 1:(i1_old-1), 1:(i0_new-1))
-    copyto!(qc.XtX, i1_old:m1, 1:(i0_new-1), qc.XtXb, (i1_old+1):m2, 1:(i0_new-1))
-    copyto!(qc.XtX, 1:(i1_old-1), (i0_new+1):n1, qc.XtXb, 1:(i1_old-1), i0_new:n2)
-    copyto!(qc.XtX, i1_old:m1, (i0_new+1):n1, qc.XtXb, (i1_old+1):m2, i0_new:n2)
-
-    qc.X1 = X[:, i1_set_new]
-    @views qc.XtX[:, i0_new] .= qc.X1' * X[:, index]
+    copyto!(qc.XtX, 1:(i1_old-1), 1:m,  qc.XtXb, 1:(i1_old-1), 1:m)
+    copyto!(qc.XtX, i1_old:n1,1:m, qc.XtXb, (i1_old+1):n2, 1:m)
 
     qc.d=d_new
     qc.p=p_new
