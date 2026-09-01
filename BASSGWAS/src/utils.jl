@@ -66,26 +66,6 @@ end
 
 #Compute X1'X[:,i0] assuming where i0 is the complement of i1
 #Assuming i1 << i0
-function _X1tX0_partial(X1, X, i1, i0)
-    size(A) != (length(i1), length(i0)) && 
-        throw(ArgumentError("Dimensions of A must match index lengths"))
-    j = 1
-    k = 1
-    for i in i1
-        sp = max(i-j, 0)
-        @views mul!(P[:, k:(sp+k-1)], X1', X[:, j:(i-1)])
-        k = k+sp
-        j = i+1
-    end
-
-    imax = i0[end]
-    if imax > i1[end]
-        sp = max(imax-j+1, 0)
-        @views mul!(P[:, k:(sp+k-1)], X1', X[:, j:imax])
-    end
-    return P
-end
-
 function _X1tX0_partial!(A, X1, X, i1, i0)
     j = 1
     k = 1
@@ -112,14 +92,14 @@ function _copy_excl(A::AbstractMatrix, idx)
     k = 1
     for i in idx
         sp = max(i-j, 0)
-        copyto!(out, 1:m, k:(sp+k-1), A, 1:m, j:(i-1))
+        copyto!(out, 1:m, k:(sp+k-1), 'N', A, 1:m, j:(i-1))
         k = k+sp
         j = i+1
     end
 
     if n > idx[end]
         sp = max(n-j+1, 0)
-        copyto!(out, 1:m, k:(sp+k-1), A, 1:m, j:n)
+        copyto!(out, 1:m, k:(sp+k-1), 'N', A, 1:m, j:n)
     end
     return out
 end

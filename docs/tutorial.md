@@ -399,11 +399,11 @@ contains 20000 variants, this should only take a few minutes.
     ## Adding worker processes ...
     ## Done
     ## Precompiling packages...
-    ##    1871.0 ms  ✓ BASSGWAS
+    ##    1943.8 ms  ✓ BASSGWAS
     ##   1 dependency successfully precompiled in 2 seconds. 101 already precompiled.
     ##   73 dependencies precompiled but different versions are currently loaded (Accessors, Accessors → LinearAlgebraExt, Adapt, Adapt → AdaptSparseArraysExt, AliasTables, ArrayInterface, ArrayInterface → ArrayInterfaceFillArraysExt, ArrayInterface → ArrayInterfaceSparseArraysExt, Base64, CommonSolve, Compat, Compat → CompatLinearAlgebraExt, CompilerSupportLibraries_jll, CompositionsBase, CompositionsBase → CompositionsBaseInverseFunctionsExt, ConstructionBase, ConstructionBase → ConstructionBaseLinearAlgebraExt, DataAPI, DataStructures, Dates, Distributions, DocStringExtensions, FillArrays, FillArrays → FillArraysPDMatsExt, FillArrays → FillArraysSparseArraysExt, FillArrays → FillArraysStatisticsExt, Gamma, HypergeometricFunctions, InteractiveUtils, InverseFunctions, InverseFunctions → InverseFunctionsDatesExt, IrrationalConstants, JLLWrappers, JuliaSyntaxHighlighting, LogExpFunctions, LogExpFunctions → LogExpFunctionsInverseFunctionsExt, Logging, MacroTools, Markdown, Missings, OffsetArrays, OffsetArrays → OffsetArraysAdaptExt, OpenLibm_jll, OpenSpecFun_jll, OrderedCollections, PDMats, PDMats → StatsBaseExt, PrecompileTools, Preferences, Printf, PtrArrays, QuadGK, Reexport, Rmath, Rmath_jll, Roots, Serialization, SortingAlgorithms, SparseArrays, SpecialFunctions, Statistics, Statistics → SparseArraysExt, StatsAPI, StatsBase, StatsFuns, StatsFuns → StatsFunsInverseFunctionsExt, StyledStrings, SuiteSparse, SuiteSparse_jll, TOML, UUIDs, UnPack and Unicode). Restart julia to access the new versions. Otherwise, 24 dependents of these packages may trigger further precompilation to work with the unexpected versions.
     ## Adapting xi ...
-    ## Found xi=3.5474546959099564
+    ## Found xi=3.5474546959099906
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -427,7 +427,7 @@ contains 20000 variants, this should only take a few minutes.
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.72127231359482 minutes."
+    ## [1] "Run time: 3.21041193008423 minutes."
 
 When using BASS-GWAS with real data, using up to 4 threads per chain is
 recommended. We recommend running chains for 500 × 1000 iterations.
@@ -714,7 +714,7 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=2.854208944316965
+    ## Found xi=2.854208944316966
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -735,12 +735,12 @@ Run BASS-GWAS
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 4.348121956898375
+    ## Design objective value: 4.348121956898373
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 3.73939429918925 minutes."
+    ## [1] "Run time: 2.89866935014725 minutes."
 
 ### Round 1
 
@@ -758,7 +758,7 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=4.402499130378542
+    ## Found xi=4.402499130378545
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -779,12 +779,12 @@ Run BASS-GWAS
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.589236853583767
+    ## Design objective value: 3.5892368535837633
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.40716618696849 minutes."
+    ## [1] "Run time: 3.04156485001246 minutes."
 
 Compute position PIPs
 
@@ -818,7 +818,7 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.1641711248975737
+    ## Found xi=3.1641711248975746
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -839,12 +839,12 @@ Run BASS-GWAS
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.6216314793974274
+    ## Design objective value: 3.6216314793974256
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.44622121651967 minutes."
+    ## [1] "Run time: 3.11554005146027 minutes."
 
 Compute position PIPs
 
@@ -878,7 +878,7 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.4705535971595776
+    ## Found xi=3.4705535971595864
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -899,12 +899,12 @@ Run BASS-GWAS
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 2.7121710027584403
+    ## Design objective value: 2.712171002758442
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.37564270099004 minutes."
+    ## [1] "Run time: 2.9998682975769 minutes."
 
 Compute position PIPs
 
@@ -938,7 +938,7 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=4.512610019541585
+    ## Found xi=4.5126100195415955
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -959,12 +959,12 @@ Run BASS-GWAS
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 1.7890774758756676
+    ## Design objective value: 1.7890774758756667
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.51201423406601 minutes."
+    ## [1] "Run time: 3.23165446519852 minutes."
 
 Compute position PIPs
 
@@ -981,10 +981,13 @@ Manhattan plot for round 4:
             labs(y="PIP", x="Position (KB)")
 
 ![](tutorial_files/figure-markdown_strict/unnamed-chunk-47-1.png) After
-round 4, representing a total of 68 (64 + 4) isolates, both causal loci,
-*parC* and *gyrA*, were identified with high confidence (PIP
+round 4, representing a total of 68 (64 + 4) isolates both causal loci,
+parC and gyrA, were identified with high confidence (PIP
  &gt; 0.9
-). This makes it clear that variants in both loci are required to
+). This makes it clear that variants in both loci contribute to
+high-level resistance. Further inspection of the predictor (beyond the
+scope of this tutorial) reveals the relationship between variants with
+high PIPs: in this case, that variants in both loci are required to
 achieve high-level resistance.
 
 Let’s see if the unitig-level PIPs are now more precise.
