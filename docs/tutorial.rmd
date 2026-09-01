@@ -531,8 +531,9 @@ read_csv("round4/position_pips.csv", progress=F, show_col_types=F) %>%
         ylim(0,1)+
         labs(y="PIP", x="Position (KB)")
 ```
-After round 4, representing a total of 68 (64 + 4) isolates, both causal loci,  _parC_ and _gyrA_, were identified with high confidence (PIP $$ > 0.9$$). 
-This makes it clear that variants in both loci are required to achieve high-level resistance.
+After round 4, representing a total of 68 (64 + 4) isolates both causal loci, parC and gyrA, were identified with high confidence (PIP $$ > 0.9$$). 
+This makes it clear that variants in both loci contribute to high-level resistance. 
+Further inspection of the predictor (beyond the scope of this tutorial) reveals the relationship between variants with high PIPs: in this case, that variants in both loci are required to achieve high-level resistance.
 
 Let's see if the unitig-level PIPs are now more precise.
 ```{bash, warning=FALSE, message=FALSE}
