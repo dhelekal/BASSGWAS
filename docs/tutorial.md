@@ -104,7 +104,7 @@ isolate, and the first row contain unique isolate identifiers:
 </tbody>
 </table>
 
-The isolate indentifiers must be shared between the variant file and the
+The isolate identifiers must be shared between the variant file and the
 phylogeny. If using unitigs,
 [unitig-caller](https://github.com/bacpop/unitig-caller) can create this
 file for you.
@@ -113,7 +113,7 @@ file for you.
 
 Representing genetic variation in bacterial populations is an active
 area of research. There are many distinct approaches, for example using
-VCFs, unitigs, kmers, gene presence absence, etc. To ensure proper
+VCFs, unitigs, kmers, gene presence-absence, etc. To ensure proper
 functionality of BASS-GWAS, the representation of genetic variation
 should be both *comprehensive*, and *precise*. This is especially
 important when using adaptive sequential sampling. Unitigs are usually a
@@ -122,7 +122,7 @@ good choice.
 **DO NOT use adaptive sequential sampling with highly redundant
 representations such as kmers**
 
-**DO NOT use adaptive sequential sampling with gene presence absence
+**DO NOT use adaptive sequential sampling with gene presence-absence
 data alone**
 
 ## Inspecting the input data
@@ -154,9 +154,9 @@ storing the generated input files.
 
 Next we will use the data preprocessing script `prepare_data.R` to
 process the variant presence-absence file and the phylogeny into
-BASS-GWAS inputs. As a part of preprocessing, variant presence absence
+BASS-GWAS inputs. As a part of preprocessing, variant presence-absence
 patterns will be standardised, centred, and deduplicated. The phylogeny
-is used to compute a factorised, low rank, similarity matrix.
+is used to compute a factorised, low-rank similarity matrix.
 
 `prepare_data.R` usage:
 
@@ -192,20 +192,20 @@ is used to compute a factorised, low rank, similarity matrix.
 
 We will now use the script to preprocess the toy data. To speed up
 inference for the purposes of this tutorial, we will retain only 90% of
-the variance
+the variance.
 
     Rapp ../helper_scripts/prepare_data.R ../sample_data/variants.rtab ../sample_data/tree.tre --odir gwas_inputs --svd_threshold 0.9
 
-This will generate the following input files in an gwas\_inputs
+This will generate the following input files in a `gwas_inputs`
 subdirectory.
 
-The following two files are subsequently used with BASS-GWAS
+The following two files are subsequently used with BASS-GWAS:
 
--   `patterns_centred.csv` a centred, minorized, and deduplicated
-    variant presence absence file for use with BASS-GWAS.
+-   `patterns_centred.csv`: a centred, minorized, and deduplicated
+    variant presence-absence file for use with BASS-GWAS.
 
--   `U.csv` & `S.csv` a low-rank factorisation of the correlation matrix
-    implied by the phylogeny for use with BASS-GWAS.
+-   `U.csv` & `S.csv`: a low-rank factorisation of the correlation
+    matrix implied by the phylogeny for use with BASS-GWAS.
 
 The `vars2patts.csv` file maps between the original variant identifiers
 and the deduplicated variants that form `patterns_centred.csv`:
@@ -390,7 +390,7 @@ dataset to 200 isolates.
 
     dat_small %>% write_csv("gwas_inputs/data200.csv")
 
-We’re now ready to run BASSGWAS sampling. As the toy dataset only
+We’re now ready to run BASS-GWAS sampling. As the toy dataset only
 contains 20000 variants, this should only take a few minutes.
 
     mkdir gwas_outputs
@@ -398,6 +398,10 @@ contains 20000 variants, this should only take a few minutes.
 
     ## Adding worker processes ...
     ## Done
+    ## Precompiling packages...
+    ##    1871.0 ms  ✓ BASSGWAS
+    ##   1 dependency successfully precompiled in 2 seconds. 101 already precompiled.
+    ##   73 dependencies precompiled but different versions are currently loaded (Accessors, Accessors → LinearAlgebraExt, Adapt, Adapt → AdaptSparseArraysExt, AliasTables, ArrayInterface, ArrayInterface → ArrayInterfaceFillArraysExt, ArrayInterface → ArrayInterfaceSparseArraysExt, Base64, CommonSolve, Compat, Compat → CompatLinearAlgebraExt, CompilerSupportLibraries_jll, CompositionsBase, CompositionsBase → CompositionsBaseInverseFunctionsExt, ConstructionBase, ConstructionBase → ConstructionBaseLinearAlgebraExt, DataAPI, DataStructures, Dates, Distributions, DocStringExtensions, FillArrays, FillArrays → FillArraysPDMatsExt, FillArrays → FillArraysSparseArraysExt, FillArrays → FillArraysStatisticsExt, Gamma, HypergeometricFunctions, InteractiveUtils, InverseFunctions, InverseFunctions → InverseFunctionsDatesExt, IrrationalConstants, JLLWrappers, JuliaSyntaxHighlighting, LogExpFunctions, LogExpFunctions → LogExpFunctionsInverseFunctionsExt, Logging, MacroTools, Markdown, Missings, OffsetArrays, OffsetArrays → OffsetArraysAdaptExt, OpenLibm_jll, OpenSpecFun_jll, OrderedCollections, PDMats, PDMats → StatsBaseExt, PrecompileTools, Preferences, Printf, PtrArrays, QuadGK, Reexport, Rmath, Rmath_jll, Roots, Serialization, SortingAlgorithms, SparseArrays, SpecialFunctions, Statistics, Statistics → SparseArraysExt, StatsAPI, StatsBase, StatsFuns, StatsFuns → StatsFunsInverseFunctionsExt, StyledStrings, SuiteSparse, SuiteSparse_jll, TOML, UUIDs, UnPack and Unicode). Restart julia to access the new versions. Otherwise, 24 dependents of these packages may trigger further precompilation to work with the unexpected versions.
     ## Adapting xi ...
     ## Found xi=3.5474546959099564
     ## Running parallel chains ...
@@ -406,26 +410,26 @@ contains 20000 variants, this should only take a few minutes.
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   e ⋯
-    ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64     ⋯
+    ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   ess ⋯
+    ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64       ⋯
     ## 
-    ##            n    6.8120    4.5709    0.2399   386.1948   455.3415    1.0103     ⋯
-    ##        sigma    1.0800    1.2193    0.0376   974.3384   736.7259    1.0000     ⋯
-    ##            r    0.8860    1.5298    0.0578   735.7150   680.3518    1.0025     ⋯
-    ##            c   11.9975   13.3147    0.4610   621.6985   802.9035    1.0031     ⋯
-    ##        icept   -5.1359    2.4287    0.1577   247.6430   665.9075    1.0253     ⋯
-    ##            Z    0.0701    0.0352    0.0012   802.5125   856.3953    1.0048     ⋯
+    ##            n    6.8120    4.5709    0.2399   386.1948   455.3415    1.0103       ⋯
+    ##        sigma    1.0800    1.2193    0.0376   974.3384   736.7259    1.0000       ⋯
+    ##            r    0.8860    1.5298    0.0578   735.7150   680.3518    1.0025       ⋯
+    ##            c   11.9975   13.3147    0.4610   621.6985   802.9035    1.0031       ⋯
+    ##        icept   -5.1359    2.4287    0.1577   247.6430   665.9075    1.0253       ⋯
+    ##            Z    0.0701    0.0352    0.0012   802.5125   856.3953    1.0048       ⋯
     ## 
-    ##                                                                 1 column omitted
+    ##                                                                   1 column omitted
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.45743828614553 minutes."
+    ## [1] "Run time: 4.72127231359482 minutes."
 
-When using BASSGWAS with real data using up to 4 threads per chain is
+When using BASS-GWAS with real data, using up to 4 threads per chain is
 recommended. We recommend running chains for 500 × 1000 iterations.
 
 ## Identifying associations
@@ -550,10 +554,10 @@ pairs:
 
 The toy dataset contains two variant grouping files:
 
--   `locus_groups.R` which groups unitigs by annotations of the loci
-    they map to
--   `position_groups.R` which groups unitigs by genomic position using
-    250bp overlapping windows spaced 125bp apart.
+-   `locus_groups.R` groups unitigs by annotations of the loci they map
+    to.
+-   `position_groups.R` groups unitigs by genomic position, using 250bp
+    overlapping windows spaced 125bp apart.
 
 <!-- -->
 
@@ -573,13 +577,13 @@ The toy dataset contains two variant grouping files:
 
 ### Using Manhattan plots
 
-We can use the position grouping, together with the posterior draws to
-calculate the PIPs for individual genomic positions along the
-chromosome.
+We can use grouping by genomic position, together with the posterior
+draws, to calculate the PIPs for individual genomic position windows
+along the chromosome.
 
     Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv gwas_outputs/position_pips.csv gwas_outputs/par_draws.csv gwas_outputs/gamma_draws.csv gwas_inputs/vars2patts.csv
 
-In turn, position PIPs can be visualised as a manhattan plot:
+In turn, position PIPs can be visualised as a Manhattan plot:
 
     parC_begin <- 194768
     parC_end <- 197071
@@ -601,8 +605,9 @@ In turn, position PIPs can be visualised as a manhattan plot:
 
 ### Using variant annotations
 
-Alternatively we can use the locus grouping to identify associated loci
-while limiting reference bias
+Alternatively, we can use the locus grouping to identify associated
+annotated loci while limiting reference bias by mapping each unitig to
+the annotated de novo assembly from its own parent isolate.
 
     Rapp ../helper_scripts/comp_group_pips.R ../sample_data/locus_groups.csv gwas_outputs/locus_pips.csv gwas_outputs/par_draws.csv gwas_outputs/gamma_draws.csv gwas_inputs/vars2patts.csv
 
@@ -624,7 +629,7 @@ Based on these two summaries we can see that there are two peaks at the
 *gyrA* and *parC* loci, substitutions in both of which are required to
 attain high-level ciprofloxacin resistance.
 
-While *gyrA* was identified with a relatively high-level of confidence
+While *gyrA* was identified with a relatively high level of confidence
 (PIP
  &gt; 0.7
 ), the confidence for the *parC* hit remains low (PIP
@@ -716,17 +721,17 @@ Run BASS-GWAS
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat    ⋯
-    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64    ⋯
+    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat   es ⋯
+    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64      ⋯
     ## 
-    ##            n    7.5980    6.6832    0.2758    701.8529   689.1893    1.0008    ⋯
-    ##        sigma    1.4246   11.8817    0.3813   1012.9606   916.9188    1.0000    ⋯
-    ##            r    2.6950    6.3460    0.2016   1095.2376   985.3725    1.0027    ⋯
-    ##            c    9.6662   13.6617    0.4135   1016.7319   978.1122    0.9996    ⋯
-    ##        icept   -1.9056    2.8864    0.0942    906.7984   997.6708    1.0011    ⋯
-    ##            Z    0.0760    0.0346    0.0012    761.3074   691.4465    1.0016    ⋯
+    ##            n    7.5980    6.6832    0.2758    701.8529   689.1893    1.0008      ⋯
+    ##        sigma    1.4246   11.8817    0.3813   1012.9606   916.9188    1.0000      ⋯
+    ##            r    2.6950    6.3460    0.2016   1095.2376   985.3725    1.0027      ⋯
+    ##            c    9.6662   13.6617    0.4135   1016.7319   978.1122    0.9996      ⋯
+    ##        icept   -1.9056    2.8864    0.0942    906.7984   997.6708    1.0011      ⋯
+    ##            Z    0.0760    0.0346    0.0012    761.3074   691.4465    1.0016      ⋯
     ## 
-    ##                                                                 1 column omitted
+    ##                                                                   1 column omitted
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
@@ -735,7 +740,7 @@ Run BASS-GWAS
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 3.65493578513463 minutes."
+    ## [1] "Run time: 3.73939429918925 minutes."
 
 ### Round 1
 
@@ -760,17 +765,17 @@ Run BASS-GWAS
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat    ⋯
-    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64    ⋯
+    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat   es ⋯
+    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64      ⋯
     ## 
-    ##            n    7.2440    6.4248    0.2702    599.3479   777.5930    1.0026    ⋯
-    ##        sigma    1.2064    1.9002    0.0570   1090.8130   829.3528    0.9991    ⋯
-    ##            r    1.5445    2.8284    0.0955    866.6980   877.3446    1.0030    ⋯
-    ##            c    9.2009   11.3713    0.3481   1106.7804   964.9872    0.9986    ⋯
-    ##        icept   -2.9342    2.2011    0.0735    822.0807   912.6107    1.0005    ⋯
-    ##            Z    0.0681    0.0289    0.0011    635.7887   710.0038    1.0005    ⋯
+    ##            n    7.2440    6.4248    0.2702    599.3479   777.5930    1.0026      ⋯
+    ##        sigma    1.2064    1.9002    0.0570   1090.8130   829.3528    0.9991      ⋯
+    ##            r    1.5445    2.8284    0.0955    866.6980   877.3446    1.0030      ⋯
+    ##            c    9.2009   11.3713    0.3481   1106.7804   964.9872    0.9986      ⋯
+    ##        icept   -2.9342    2.2011    0.0735    822.0807   912.6107    1.0005      ⋯
+    ##            Z    0.0681    0.0289    0.0011    635.7887   710.0038    1.0005      ⋯
     ## 
-    ##                                                                 1 column omitted
+    ##                                                                   1 column omitted
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
@@ -779,9 +784,9 @@ Run BASS-GWAS
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.42917079925537 minutes."
+    ## [1] "Run time: 4.40716618696849 minutes."
 
-Compute position PIPS
+Compute position PIPs
 
     Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv round1/position_pips.csv round1/par_draws.csv round1/gamma_draws.csv gwas_inputs/vars2patts.csv
 
@@ -820,17 +825,17 @@ Run BASS-GWAS
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
-    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64   ⋯
+    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   e ⋯
+    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64     ⋯
     ## 
-    ##            n    7.6790    6.3434    0.3091    603.5699    433.4688    1.0044   ⋯
-    ##        sigma    1.2482    2.6716    0.0822    884.3329    765.6434    0.9985   ⋯
-    ##            r    0.8308    1.6066    0.0498   1057.2448   1030.1006    0.9992   ⋯
-    ##            c   11.2987   13.2012    0.4292    893.2933    936.9296    1.0011   ⋯
-    ##        icept   -3.8464    2.3625    0.0860    819.5100    854.2453    0.9983   ⋯
-    ##            Z    0.0712    0.0330    0.0011    931.7134    941.7202    0.9991   ⋯
+    ##            n    7.6790    6.3434    0.3091    603.5699    433.4688    1.0044     ⋯
+    ##        sigma    1.2482    2.6716    0.0822    884.3329    765.6434    0.9985     ⋯
+    ##            r    0.8308    1.6066    0.0498   1057.2448   1030.1006    0.9992     ⋯
+    ##            c   11.2987   13.2012    0.4292    893.2933    936.9296    1.0011     ⋯
+    ##        icept   -3.8464    2.3625    0.0860    819.5100    854.2453    0.9983     ⋯
+    ##            Z    0.0712    0.0330    0.0011    931.7134    941.7202    0.9991     ⋯
     ## 
-    ##                                                                 1 column omitted
+    ##                                                                   1 column omitted
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
@@ -839,9 +844,9 @@ Run BASS-GWAS
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.42771975199382 minutes."
+    ## [1] "Run time: 4.44622121651967 minutes."
 
-Compute position PIPS
+Compute position PIPs
 
     Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv round2/position_pips.csv round2/par_draws.csv round2/gamma_draws.csv gwas_inputs/vars2patts.csv
 
@@ -880,17 +885,17 @@ Run BASS-GWAS
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
-    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64   ⋯
+    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   e ⋯
+    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64     ⋯
     ## 
-    ##            n    7.3770    5.2165    0.2147    502.4948    590.1907    0.9988   ⋯
-    ##        sigma    1.2022    1.9340    0.0599   1008.9718    948.0836    0.9984   ⋯
-    ##            r    0.5887    1.1869    0.0379    899.4648   1016.2606    0.9997   ⋯
-    ##            c   10.3113   11.4376    0.3787    880.1297    923.4503    0.9993   ⋯
-    ##        icept   -4.6718    2.6202    0.1121    538.4919    868.9468    1.0008   ⋯
-    ##            Z    0.0687    0.0314    0.0011    783.3491    909.5722    0.9998   ⋯
+    ##            n    7.3770    5.2165    0.2147    502.4948    590.1907    0.9988     ⋯
+    ##        sigma    1.2022    1.9340    0.0599   1008.9718    948.0836    0.9984     ⋯
+    ##            r    0.5887    1.1869    0.0379    899.4648   1016.2606    0.9997     ⋯
+    ##            c   10.3113   11.4376    0.3787    880.1297    923.4503    0.9993     ⋯
+    ##        icept   -4.6718    2.6202    0.1121    538.4919    868.9468    1.0008     ⋯
+    ##            Z    0.0687    0.0314    0.0011    783.3491    909.5722    0.9998     ⋯
     ## 
-    ##                                                                 1 column omitted
+    ##                                                                   1 column omitted
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
@@ -899,9 +904,9 @@ Run BASS-GWAS
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.34054396947225 minutes."
+    ## [1] "Run time: 4.37564270099004 minutes."
 
-Compute position PIPS
+Compute position PIPs
 
     Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv round3/position_pips.csv round3/par_draws.csv round3/gamma_draws.csv gwas_inputs/vars2patts.csv
 
@@ -940,17 +945,17 @@ Run BASS-GWAS
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ⋯
-    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64   ⋯
+    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   e ⋯
+    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64     ⋯
     ## 
-    ##            n    8.9160    5.0777    0.2221    551.5677    564.0845    1.0011   ⋯
-    ##        sigma    1.3896    3.0045    0.1110   1082.8184    929.8503    1.0010   ⋯
-    ##            r    0.6942    1.5269    0.0507    981.0559   1037.7857    1.0000   ⋯
-    ##            c   13.8678   13.2470    0.4230    914.3102   1076.2587    0.9985   ⋯
-    ##        icept   -7.5880    3.3401    0.1228    743.1112    900.7765    0.9987   ⋯
-    ##            Z    0.0576    0.0265    0.0010    662.9775    915.1700    0.9994   ⋯
+    ##            n    8.9160    5.0777    0.2221    551.5677    564.0845    1.0011     ⋯
+    ##        sigma    1.3896    3.0045    0.1110   1082.8184    929.8503    1.0010     ⋯
+    ##            r    0.6942    1.5269    0.0507    981.0559   1037.7857    1.0000     ⋯
+    ##            c   13.8678   13.2470    0.4230    914.3102   1076.2587    0.9985     ⋯
+    ##        icept   -7.5880    3.3401    0.1228    743.1112    900.7765    0.9987     ⋯
+    ##            Z    0.0576    0.0265    0.0010    662.9775    915.1700    0.9994     ⋯
     ## 
-    ##                                                                 1 column omitted
+    ##                                                                   1 column omitted
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
@@ -959,9 +964,9 @@ Run BASS-GWAS
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 4.62276121775309 minutes."
+    ## [1] "Run time: 4.51201423406601 minutes."
 
-Compute position PIPS
+Compute position PIPs
 
     Rapp ../helper_scripts/comp_group_pips.R ../sample_data/position_groups.csv round4/position_pips.csv round4/par_draws.csv round4/gamma_draws.csv gwas_inputs/vars2patts.csv
 
@@ -976,13 +981,13 @@ Manhattan plot for round 4:
             labs(y="PIP", x="Position (KB)")
 
 ![](tutorial_files/figure-markdown_strict/unnamed-chunk-47-1.png) After
-round 4, representing a total of 68 (64 + 4) isolates both causal loci,
+round 4, representing a total of 68 (64 + 4) isolates, both causal loci,
 *parC* and *gyrA*, were identified with high confidence (PIP
  &gt; 0.9
 ). This makes it clear that variants in both loci are required to
 achieve high-level resistance.
 
-Let’s see if the the unitig-level PIPs are now more precise.
+Let’s see if the unitig-level PIPs are now more precise.
 
     Rapp ../helper_scripts/comp_variant_pips.R round4/variant_pips.csv round4/par_draws.csv round4/pip_draws.csv gwas_inputs/vars2patts.csv
 
@@ -1033,7 +1038,7 @@ Inspect *gyrA* variants
 The variants mapping to *gyrA* are dominated by a handful of strongly
 associated variants all mapping to the QRDR region. The relatively low
 PIPs for each of these individual variants reflects the unitig
-representation for this highly diverse causal locus within gyrA, which
+representation for this highly diverse causal locus within *gyrA*, which
 is split over several different unitigs.
 
 In both cases adaptive design greatly improved efficiency over random
@@ -1042,7 +1047,7 @@ sampling.
 ## Additional functionality
 
 BASS-GWAS provides additional functionality that may be useful in
-real-world experimental applications
+real-world experimental applications.
 
 ### Re-using draws to redesign an experiment
 
@@ -1099,11 +1104,11 @@ line.
 
 # Tips
 
--   Ensure that only high quality isolates are included in experimental
+-   Ensure that only high-quality isolates are included in experimental
     design collections. Mislabeled or contaminated isolates may severely
     compromise BASS-GWAS functionality.
 
--   Use experimental controls to reduce phenotyping noise
+-   Use experimental controls to reduce phenotyping noise.
 
 -   Set the allele frequency filter to a reasonable value. This should
     be organism specific. A frequency of
