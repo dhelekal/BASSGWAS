@@ -426,7 +426,7 @@ contains 20000 variants, this should only take a few minutes.
     ## [1] "Run time: 3.13090380032857 minutes."
 
 When using BASS-GWAS with real data, using up to 4 threads per chain is
-recommended. We recommend running chains for 500 × 1000 iterations.
+recommended. We recommend running chains for 500 × 1000 iterations and running 4 chains in parallel.
 
 ## Identifying associations
 

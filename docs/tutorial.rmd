@@ -223,7 +223,7 @@ julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gw
 paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 ```
 
-When using BASS-GWAS with real data, using up to 4 threads per chain is recommended. We recommend running chains for  $500\times 1000$ iterations.
+When using BASS-GWAS with real data, using up to 4 threads per chain is recommended. We recommend running chains for  $500\times 1000$ iterations and running 4 chains in parallel.
 
 ## Identifying associations 
 ### Background
