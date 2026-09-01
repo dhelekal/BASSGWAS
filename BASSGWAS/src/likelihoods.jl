@@ -25,7 +25,9 @@ function TDistLogLik(nu,lambda,n)
     TDistLogLik(nu,lambda,n)
 end
 
+@inline
 (x::TDistLogLik{T})(det::T, ssq::T) where{T} = -0.5 * det - 0.5 * (x.nu+x.n) * log(x.nu*x.lambda + ssq) 
 
+@inline
 struct StdNormLogLik{T<:Real} <: Aloglik end
 (x::StdNormLogLik{T})(det::T, ssq::T) where{T} = -0.5 * det - 0.5 * ssq 

@@ -66,13 +66,26 @@ function updateSCache!(cache, ps)
 
     sinv = 1.0/s
 
-    Octavian.matmul!(YtX, Y', Xaug)
     Octavian.matmul!(YtU, Y', U)
 
     YD = YtU * D2
     copy!(cache.F, Y')
     Octavian.matmul!(cache.F', U, YD', -1.0, sinv)
-    
+
+#=    paug = size(Xaug, 2)
+
+    nt = Threads.nthreads()
+    blck_sz = ceil(Int64,paug/nt)
+
+    @batch for i in 1:blck_sz:n
+        j = min(i+blck_sz-1,paug)
+        sp = i:j
+        @views mul!(YtX, Y', Xaug[:, sp])
+        @views copy!(cache.FX[sp], YtX[sp])
+        @views mul!()
+    end
+=#
+    Octavian.matmul!(YtX, Y', Xaug)
     copy!(cache.FX, YtX)
     Octavian.matmul!(cache.FX', UtX', YD', -1.0, sinv)
 

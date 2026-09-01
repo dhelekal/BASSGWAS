@@ -176,12 +176,15 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     #A = X1CinvX1 + Diagonal((1.0/c)*ones(length(idx1_icept)))
     AChol = cholesky(Hermitian(A))
     Ainv = inv(AChol)
+    
+    cinv = 1.0 / c
 
     FX1 = scache.FX[:,idx1_icept]
-    #FX0 = scache.FX[:,idx0]
-    t=@elapsed FX = copy(scache.FX'[1:p])
+    
+    t=@elapsed @views dets .= cinv .+ scache.sqX[1:p] .* sinv
     perf!("upstate.up.fx0", t)
-    t=@elapsed sqX = scache.sqX[1:p]
+
+    t=@elapsed @views copy!(ssq, scache.FX'[1:p])
     perf!("upstate.up.sqx0", t)
 
     qterm = scache.qterm
@@ -191,7 +194,7 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     det_curr += scache.cdet + (d-1)*log(c) + log(mc)
 
     t = @elapsed _inc_up2!(ssq, dets,
-        c, AChol, QX1, QX, FX1, FX, X1tX0, sqX, sinv)
+        c, AChol, QX1, QX, FX1, X1tX0, sinv)
     perf!("upstate.up.up2", t)
 
 
@@ -206,7 +209,7 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
 end
 
 
-function _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, W, X1tX0, sqX, sinv) #FX0, X1tX0, sqX0, sinv)
+function _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, X1tX0, sinv) #FX0, X1tX0, sqX0, sinv)
     ## Determinant Updates
     # x_i' Cinv x_i forall i
 
@@ -215,12 +218,8 @@ function _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, W, X1tX0, sqX, sinv) #FX0,
 
     U = AChol.U' \ FX1' # p x 1
     quad_term = -dot(U,U) 
-    #W = copy(FX0')
 
     AinvBs = copy(X1tX0)
-    
-    cinv = 1.0 / c
-    a = cinv .+ sqX .* sinv
 
     nt = Threads.nthreads()
     blck_sz = ceil(Int64,n/nt)
@@ -228,28 +227,15 @@ function _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, W, X1tX0, sqX, sinv) #FX0,
     @batch for i in 1:blck_sz:n
         j = min(i+blck_sz-1,n)
         sp = i:j
-        _a = view(a, sp)
-        _W = view(W, sp)
+        _dets = view(dets, sp)
+        _ssq = view(ssq, sp)
         _AinvBs = view(AinvBs, :, sp)
         _QX = view(QX, :, sp)
-        _up_blck2!(_a, _W, _QX, _AinvBs, U, QX1, AChol, sinv, c, quad_term, d)
+        _up_blck2!(_dets, _ssq, _QX, _AinvBs, U, QX1, AChol, sinv, c, quad_term, d)
     end
-
-    #a .*= -1.0
-    #a .+= (1.0/c) .+ sinv*sqX0 
-    #W ./= a
-    #W .+= quad_term
-
-    #map!((x) -> abs(x), a, a)
-    #map!((x) -> log(x), a, a)
-    #a .+= p*log(c)
-
-
-    dets .= a
-    ssq .= W
 end
 
-function _up_blck2!(a, W, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
+function _up_blck2!(dets, ssq, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
     ## Determinant Updates
     # x_i' Cinv x_i forall i
     @turbo for j in axes(QX,2)
@@ -257,7 +243,7 @@ function _up_blck2!(a, W, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
         for i in axes(QX,1)
             s += QX[i,j]*QX[i,j]
         end
-        a[j] -= s
+        dets[j] -= s
     end
 
     gemm!('T', 'N', -1.0, QX1, QX, sinv, AinvBs)
@@ -269,20 +255,20 @@ function _up_blck2!(a, W, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
             x = AinvBs[i,j]
             s += x*x
         end
-        a[j] -= s
+        dets[j] -= s
     end
 
-    gemv!('T', 1.0, AinvBs, U, -1.0, W)
+    gemv!('T', 1.0, AinvBs, U, -1.0, ssq)
 
-    @turbo for i in eachindex(a)
-        w=W[i]
-        W[i] = -w*w/a[i] + qterm
+    @turbo for i in eachindex(dets)
+        w=ssq[i]
+        ssq[i] = -w*w/dets[i] + qterm
     end
     
     lc = log(c)
-    @turbo for i in eachindex(a)
-        x = log(abs(a[i]))
-        a[i] = x + lc
+    @turbo for i in eachindex(dets)
+        x = log(abs(dets[i]))
+        dets[i] = x + lc
     end
 
     nothing
@@ -334,6 +320,33 @@ end
 function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
     p = length(conds)
     w = eps/p
+    
+    nt = Threads.nthreads()
+    blck_sz = ceil(Int64,p/nt)
+
+    @batch for i in 1:blck_sz:p
+        j = min(i+blck_sz-1,p)
+        sp = i:j
+        @turbo for k in sp
+            llr = llrs[k]
+            cprob = logistic(-llr)
+            pip = logistic(llr)
+
+            conds[k] = cprob
+            pips[k] = pip
+            rates[k] = 0.5*(pip+w)/cprob
+        end
+    end
+
+    #=for i in idx0
+        llr = llrs[i]
+        cprob = logistic(-llr)
+        pip = logistic(llr)
+
+        conds[i] = cprob
+        pips[i] = pip
+        rates[i] = 0.5*(pip+w)/cprob
+    end=#
 
     for i in idx1
         llr = llrs[i]
@@ -345,15 +358,6 @@ function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
         rates[i] = 0.5*(pip+w)/cprob
     end
 
-    for i in idx0
-        llr = llrs[i]
-        cprob = logistic(-llr)
-        pip = logistic(llr)
-
-        conds[i] = cprob
-        pips[i] = pip
-        rates[i] = 0.5*(pip+w)/cprob
-    end
     nothing
 end
 
@@ -365,10 +369,22 @@ function comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta
     lpr_incl = _inc_prior(γ+1, p, alpha, beta) - prior_curr
     lpr_excl = γ > 0 ? _inc_prior(γ-1, p, alpha, beta) - prior_curr : -Inf64
     
-    for i in axes(llrs, 1)
+    n=size(llrs,1)
+    nt = Threads.nthreads()
+    blck_sz = ceil(Int64,n/nt)
+    @batch for i in 1:blck_sz:n
+        j = min(i+blck_sz-1,n)
+        sp = i:j
+        @turbo for k in sp
+            ll = loglik(dets[k], ssq[k])
+            llrs[k] = ll - ll_curr
+        end
+    end
+
+    #=for i in axes(llrs, 1)
         ll = loglik(dets[i], ssq[i])
         llrs[i] = ll - ll_curr
-    end
+    end=#
 
     #current ll 
     #ll_prev = ll_curr + prior_curr
