@@ -140,10 +140,8 @@ function comp_ll2(scache, qcache, ps, γ, loglik::Aloglik)
     A[end, end] += (-1.0/c + 1.0/mc)
 
     AChol = cholesky(Hermitian(A))
-    #Ainv = inv(AChol)
     ldiv!(AChol.U', FX1')
 
-    #ssq_curr = -(FX1 * Ainv * FX1') + qterm
     ssq_curr = -dot(FX1, FX1) + qterm
     det_curr = logabsdet(AChol)[1]
     det_curr += cdet + (d-1)*log(c) + log(mc)
@@ -154,6 +152,8 @@ end
 function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     
     paug = scache.paug
+    p = paug-1
+
     p = paug-1
 
     idx1_icept = [idx1; paug]
@@ -173,9 +173,10 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     A = X1CinvX1 + UniformScaling(1.0/c)
     A[end, end] += (-1.0/c + 1.0/mc)
 
-    #A = X1CinvX1 + Diagonal((1.0/c)*ones(length(idx1_icept)))
     AChol = cholesky(Hermitian(A))
     Ainv = inv(AChol)
+    
+    cinv = 1.0 / c
     
     cinv = 1.0 / c
 
@@ -229,23 +230,33 @@ function _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, X1tX0, sinv) #FX0, X1tX0, 
         sp = i:j
         _dets = view(dets, sp)
         _ssq = view(ssq, sp)
+        _dets = view(dets, sp)
+        _ssq = view(ssq, sp)
         _AinvBs = view(AinvBs, :, sp)
+        _QX = view(QX, :, sp)
+        _up_blck2!(_dets, _ssq, _QX, _AinvBs, U, QX1, AChol, sinv, c, quad_term, d)
         _QX = view(QX, :, sp)
         _up_blck2!(_dets, _ssq, _QX, _AinvBs, U, QX1, AChol, sinv, c, quad_term, d)
     end
 end
 
 function _up_blck2!(dets, ssq, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
+function _up_blck2!(dets, ssq, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
     ## Determinant Updates
     # x_i' Cinv x_i forall i
+    @turbo for j in axes(QX,2)
     @turbo for j in axes(QX,2)
         s = 0.0 
         for i in axes(QX,1)
             s += QX[i,j]*QX[i,j]
+        for i in axes(QX,1)
+            s += QX[i,j]*QX[i,j]
         end
+        dets[j] -= s
         dets[j] -= s
     end
 
+    gemm!('T', 'N', -1.0, QX1, QX, sinv, AinvBs)
     gemm!('T', 'N', -1.0, QX1, QX, sinv, AinvBs)
     ldiv!(AChol.U', AinvBs)
 
@@ -256,16 +267,24 @@ function _up_blck2!(dets, ssq, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
             s += x*x
         end
         dets[j] -= s
+        dets[j] -= s
     end
 
     gemv!('T', 1.0, AinvBs, U, -1.0, ssq)
+    gemv!('T', 1.0, AinvBs, U, -1.0, ssq)
 
+    @turbo for i in eachindex(dets)
+        w=ssq[i]
+        ssq[i] = -w*w/dets[i] + qterm
     @turbo for i in eachindex(dets)
         w=ssq[i]
         ssq[i] = -w*w/dets[i] + qterm
     end
     
     lc = log(c)
+    @turbo for i in eachindex(dets)
+        x = log(abs(dets[i]))
+        dets[i] = x + lc
     @turbo for i in eachindex(dets)
         x = log(abs(dets[i]))
         dets[i] = x + lc
@@ -369,6 +388,13 @@ function comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta
     lpr_incl = _inc_prior(γ+1, p, alpha, beta) - prior_curr
     lpr_excl = γ > 0 ? _inc_prior(γ-1, p, alpha, beta) - prior_curr : -Inf64
     
+    n=size(llrs,1)
+    nt = Threads.nthreads()
+    blck_sz = ceil(Int64,n/nt)
+    @batch for i in 1:blck_sz:n
+        j = min(i+blck_sz-1,n)
+        sp = i:j
+        @views ll_minus_a!(llrs[sp], dets[sp], ssq[sp], ll_curr, loglik)
     n=size(llrs,1)
     nt = Threads.nthreads()
     blck_sz = ceil(Int64,n/nt)

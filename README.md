@@ -26,7 +26,7 @@
 
 
 ## Introduction
-BASS-GWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a framework for efficient bacterial genome-wide association studies (GWAS) that require phenotyping. BASS-GWAS can select batches of isolates from a large, sequenced collection for iterative experimental phenotyping. To do this, it combines a sparse whole-genome regression model with Bayesian adaptive experimental design. BASS-GWAS reduces the number of experimental measurements needed to power GWAS by incorporating information from past iterations and the variant distribution. See the [preprint](LINK) for benchmarks and details.
+BASS-GWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a framework for efficient bacterial genome-wide association studies (GWAS) that require phenotyping. BASS-GWAS can select batches of isolates from a large, sequenced collection for iterative experimental phenotyping. To do this, it combines a sparse whole-genome regression model with Bayesian adaptive experimental design. BASS-GWAS reduces the number of experimental measurements needed to power GWAS by incorporating information from past iterations and the variant distribution. See the [preprint](https://www.biorxiv.org/content/10.64898/2026.08.26.747358) for benchmarks and details.
 
 ### Workflow diagram
 
@@ -95,7 +95,7 @@ Please submit a GitHub issue or get in touch by email `david.helekal@gmail.com`
 GNU GPL-3
 
 # Citation
-See preprint
+See [preprint](https://www.biorxiv.org/content/10.64898/2026.08.26.747358)
 
 <sub>Logo design: David Helekal, Maria Theiss</sub>
 
