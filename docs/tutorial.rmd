@@ -196,9 +196,6 @@ The trait in this dataset is high-level ($$ \geq 1 \mu g \, mL^{-1}$$) ciproflox
 To attain this level of resistance, at least one substitution in each of _gyrA_ and _parC_ genes is known to be required. 
 
 The polygenic nature of this trait makes it challenging for GWAS with binary phenotypes.
-
-We will run 2 chains in parallel each for a total of $$250 \times 500$$ iterations. 
-Moreover we will parallelize each chain across 2 CPU cores using `julia -t2`. 
 To speed things up, we will downsample the full dataset to 200 isolates.
 
 ```{r downsample data, warning=FALSE, message=FALSE}
@@ -213,7 +210,10 @@ dat_small %>% write_csv("gwas_inputs/data200.csv")
 ```{r, include=FALSE}
 tbegin <- Sys.time()
 ```
-We're now ready to run BASS-GWAS sampling. As the toy dataset only contains 20000 variants, this should only take a few minutes.
+We're now ready to run BASS-GWAS sampling.
+We will run 2 chains in parallel each for a total of $$250 \times 500$$ iterations. 
+Moreover we will parallelize each chain across 2 CPU cores using `julia -t2`. 
+As the toy dataset only contains 20000 variants, this should only take a few minutes.
 ```{bash, warning=FALSE, message=FALSE, eval=TRUE}
 mkdir gwas_outputs
 julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile gwas_inputs/data200.csv --odir gwas_outputs --batchsz 0 --ndraws 500 --nthin 250 --nchains 2
@@ -623,6 +623,8 @@ prepare_data.R --to_drop identifiers_to_drop.txt
 
 - Set the allele frequency filter to a reasonable value. This should be organism specific. A frequency of $$5/N$$ or $$10/N$$ where N is the collection size is a good starting value.
 
-- When applying BASS-GWAS to a new collection or a new organism, run synthetic experiments using known genotype/phenotype relationships to ensure proper data preparation.
+- When applying BASS-GWAS to a new collection or a new organism, run synthetic experiments (as in this tutorial) using known genotype/phenotype relationships to ensure proper data preparation.
+
+- Carefully consider the batch-size for your experimental setup. Synthetic experiments can help probe batch-size efficiency trade-offs.
 
 - Check the tempered distribution diagnostics. The `ess_bulk` should ideally be more than 1000 for each of the parameters, and more than 200 per chain. If the `ess_bulk` is low, increase `--n_thin` to a higher value.

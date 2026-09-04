@@ -350,16 +350,16 @@ function comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta
     @batch for i in 1:blck_sz:n
         j = min(i+blck_sz-1,n)
         sp = i:j
-        @views ll_minus_a!(llrs[sp], dets[sp], ssq[sp], ll_curr, loglik)
+        @views ll_plus_a!(llrs[sp], dets[sp], ssq[sp], lpr_incl-ll_curr, loglik)
     end
 
     for i in idx1
-        llrs[i] += lpr_excl
+        llrs[i] += lpr_excl-lpr_incl
     end
 
-    for i in idx0
+    #=for i in idx0
         llrs[i] += lpr_incl
-    end
+    end=#
     nothing
 end
 

@@ -67,7 +67,7 @@ function add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
     n2 = size(qc.XtXb, 1)
 
     copyto!(qc.XtX, 1:(i1_new-1), 1:m, qc.XtXb,  1:(i1_new-1), 1:m)
-    @views mul!(qc.XtX[i1_new, :], X', X[:, index])
+    @views Octavian.matmul!(qc.XtX[i1_new, :], X', X[:, index])
     copyto!(qc.XtX, (i1_new+1):n1, 1:m, qc.XtXb, (i1_new):n2, 1:m)
 
     qc.d=d_new

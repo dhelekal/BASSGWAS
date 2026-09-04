@@ -28,12 +28,12 @@ end
 @inline
 (x::TDistLogLik{T})(det::T, ssq::T) where{T} = -0.5 * det - 0.5 * (x.nu+x.n) * log(x.nu*x.lambda + ssq) 
 
-function ll_minus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::TDistLogLik{T}) where{T<:Real} 
+function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::TDistLogLik{T}) where{T<:Real} 
     nu=x.nu
     n=x.n
     lambda=x.lambda
     @turbo for i in axes(ll,1)
-        ll[i] = -0.5 * det[i] - 0.5 * (nu+n) * log(nu*lambda + ssq[i]) - a 
+        ll[i] = -0.5 * det[i] - 0.5 * (nu+n) * log(nu*lambda + ssq[i]) + a 
     end
 end
 
@@ -41,8 +41,8 @@ end
 struct StdNormLogLik{T<:Real} <: Aloglik end
 (x::StdNormLogLik{T})(det::T, ssq::T) where{T} = -0.5 * det - 0.5 * ssq 
 
-function ll_minus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::StdNormLogLik{T}) where{T<:Real} 
+function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::StdNormLogLik{T}) where{T<:Real} 
     @turbo for i in axes(ll,1)
-        ll[i] = -0.5 * det[i] - 0.5 * ssq[i] - a 
+        ll[i] = -0.5 * det[i] - 0.5 * ssq[i] + a 
     end
 end
