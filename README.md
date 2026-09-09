@@ -57,7 +57,7 @@ See the official [julia](https://julialang.org/) website for installation instru
 
 ### Helper script dependencies
 The scripts in the `helper_scripts` directory require a working `R>=4.1.0` installation together with the following packages:
-- `Rapp>=0.3.0` 
+- `Rapp>=0.3.0` followed by CLI [setup](https://github.com/r-lib/Rapp)
 - `tidyverse`
 - `ape`
 
