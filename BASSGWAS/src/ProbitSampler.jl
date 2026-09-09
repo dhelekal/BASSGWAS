@@ -182,6 +182,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     K = [X V]
     Y_old = copy(Y)
     
+    #Draw unscaled Y and discard auxilliary scale parameter
     if scalemv && scale1
         _ = draw_Ysigma!(Y_old, r_new, c_new, mc, shape, scale, X, XtX, UtX, U, S, rng)
     end
