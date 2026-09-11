@@ -357,9 +357,6 @@ function comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta
         llrs[i] += lpr_excl-lpr_incl
     end
 
-    #=for i in idx0
-        llrs[i] += lpr_incl
-    end=#
     nothing
 end
 
