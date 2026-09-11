@@ -12,6 +12,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+# Weighted tempered Gibbs state with cached quantities for every one-predictor toggle.
 mutable struct wTGSState2{Tn, Tg, Tv, Tr}
     p::Tn #number of covariates
     γ::Tg #inclusion state vector
@@ -27,6 +28,7 @@ mutable struct wTGSState2{Tn, Tg, Tv, Tr}
     eps::Tr #wTGS weight
 end
 
+# Keep the intercept as the final active column while synchronizing the model and design cache.
 function flip_gamma!(state, ps, qcache, to_flip)
     newg = 1-state.γ[to_flip]
     state.γ[to_flip] = newg
@@ -41,6 +43,7 @@ function flip_gamma!(state, ps, qcache, to_flip)
     end 
 end
 
+# Initialize the current model together with all of its one-toggle likelihood terms and rates.
 function init_state2(loglik::Aloglik, ps, scache, γ0::Array{Int64, 1}; eps = 5.0, xi_init = 1.0)
     p = length(γ0)
     alpha = ps.alpha
@@ -73,6 +76,7 @@ function init_state2(loglik::Aloglik, ps, scache, γ0::Array{Int64, 1}; eps = 5.
     comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta)
     comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
     
+    # The final rate is reserved for an auxiliary, non-predictor update.
     rates[p+1] = xi_init
     cumsum!(rsums, rates) 
  
@@ -112,6 +116,7 @@ function sample_next2(state, rng)
     return move_idx
 end
 
+# Evaluate the collapsed likelihood of the active model from the low-rank covariance cache.
 function comp_ll2(scache, qcache, ps, γ, loglik::Aloglik)
     s = ps.s
     c = ps.c
@@ -144,6 +149,7 @@ function comp_ll2(scache, qcache, ps, γ, loglik::Aloglik)
     loglik(det_curr, ssq_curr)
 end
 
+# Compute the current model and every one-toggle alternative via Woodbury and rank-one identities.
 function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     
     paug = scache.paug
@@ -194,6 +200,7 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
 end
 
 
+# Evaluate predictor additions in parallel using active-model Schur complements.
 function _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, X1tX0, sinv)
     ## Determinant Updates
     # x_i' Cinv x_i forall i
@@ -259,6 +266,7 @@ function _up_blck2!(dets, ssq, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
     nothing
 end
 
+# Evaluate active-predictor removals by downdating the inverse active-model system.
 function _inc_down2!(ssq, dets, c, Ainv, X1tCinvX1, FX1)
     p = size(ssq)[1]
     paug = size(Ainv)[2]
@@ -302,6 +310,7 @@ function _inc_down2!(ssq, dets, c, Ainv, X1tCinvX1, FX1)
     nothing
 end
 
+# `conds` is the probability of the current state; `pips` is the conditional inclusion probability.
 function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
     p = length(conds)
     w = eps/p
@@ -336,6 +345,7 @@ function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
     nothing
 end
 
+# Store each toggle's posterior log ratio relative to the current model.
 function comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta)
 
     γ = length(idx1)
@@ -367,6 +377,7 @@ function _inc_prior(γ, p, alpha, beta)
 end
 
 
+# Explicit covariance calculation retained as a reference for the cached update path.
 function _update_state_test!(state, ps, scache, qcache, loglik::Aloglik; eps=5.0)
 
     @unpack p, γ, dets, ssq, llrs, pips, conds, rates, rsums = state
@@ -488,6 +499,7 @@ function _direct_ll(Y, r, c, mc, X, U, S, nu, lambda)
     return det1+det2-0.5*(n+nu)*log(nu*lambda + ssq)
 end
 
+# Low-rank Woodbury form of the covariance-adjusted bilinear term between two responses.
 function _comp_ssq(Y1, Y2, r, c, mc, X, XtX, UtX, U, S)
 
     d = similar(S)
@@ -522,6 +534,7 @@ function _comp_ssq(Y1, Y2, r, c, mc, X, XtX, UtX, U, S)
     return ssq
 end
 
+# Quadratic-form specialization used by the latent-scale update.
 function _comp_ssq(Y, r, c, mc, X, XtX, UtX, U, S)
 
     d = similar(S)
@@ -551,6 +564,7 @@ function _comp_ssq(Y, r, c, mc, X, XtX, UtX, U, S)
     return ssq
 end
 
+# Return the collapsed quadratic and determinant terms for variance proposals.
 function _comp_llterms(Y, r, c, mc, X, XtX, UtX, YtU, S)
     d = similar(S)
 

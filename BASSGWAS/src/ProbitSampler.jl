@@ -12,6 +12,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+# Owns the discrete model, latent liabilities, low-rank caches, and adaptation state.
 mutable struct ProbitBVSSampler{Tp, Tc, Ts, Tk, Tl, Ti, Tb, Tn, Ta, Tr}
     parState::Tp
     scache::Tc
@@ -49,6 +50,7 @@ function ProbitBVSSampler(X::AbstractMatrix{Tx}, Y::AbstractVector{Ty}, U::Abstr
     
     loglik = TDistLogLik(nu, lambda, n)
 
+    # Initialize latent liabilities on the side of zero fixed by each binary outcome.
     signs = 1.0 * (Y .> 0) .+ -1.0 * (Y .<= 0)
     Yinit = abs.(randn(rng, n)) .* signs
     rinit = abs(1.0*randn(rng)) + 1e-8
@@ -67,6 +69,7 @@ function ProbitBVSSampler(X::AbstractMatrix{Tx}, Y::AbstractVector{Ty}, U::Abstr
     return ProbitBVSSampler(parState, cache, tgsstate, qcache, loglik, 0, 0, nadapt, !adapt_xi, adapt_xi, xi_targ, sample_c, adaptor, shape, scale, rng)
 end
 
+# Warm-up refreshes latent and continuous state; later steps also permit predictor toggles.
 function next_step!(samp::ProbitBVSSampler)
     if samp.T > 10
         next_flip = sample_next2(samp.wTGSState, samp.rng)
@@ -78,6 +81,7 @@ function next_step!(samp::ProbitBVSSampler)
             update_state2!(samp.wTGSState, samp.parState, samp.scache, samp.qcache, samp.loglik)
         end
         #Adapt xi
+        # Target the auxiliary update's share of the total move intensity.
         if !samp.isadapted && samp.adapt_xi
             xi_targ = samp.xi_targ
             xi = samp.wTGSState.xi
@@ -123,6 +127,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     S = sc.S
     V = sc.V
 
+    # Proposals are made on positive standard-deviation scales and squared after acceptance.
     rsqrt = sqrt(r)
     csqrt = sqrt(c)
 
@@ -133,6 +138,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
 
     adaptor = samp.adaptor
 
+    # Metropolis updates use a likelihood collapsed over Gaussian coefficients.
     for i in 1:25
 
         dt = get_dt(adaptor)
@@ -170,19 +176,23 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         end
     end
 
+    # Convert accepted standard deviations back to variance parameters.
     r_new = rsqrt * rsqrt
     c_new = csqrt * csqrt
 
+    # Liability signs retain the observed binary outcomes throughout augmentation.
     signs = sign.(Y)
 
     n = size(Y, 1)
     l = size(X, 2)
     m = size(U, 2)
 
+    # Active predictors, intercept, and random-effect basis form the Gaussian model matrix.
     K = [X V]
     Y_old = copy(Y)
     
     #Draw unscaled Y and discard auxilliary scale parameter
+    # Work on a copy so this conditional scale draw only feeds the coefficient update.
     if scalemv && scale1
         _ = draw_Ysigma!(Y_old, r_new, c_new, mc, shape, scale, X, XtX, UtX, U, S, rng)
     end
@@ -192,6 +202,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     #Y_new are Y means, to be reused
     Y_new = K*beta
 
+    # Resample liabilities from the half-line compatible with each observed outcome.
     for i in eachindex(Y_new)
         y_mu = Y_new[i]
         if signs[i] >= 0.0
@@ -203,6 +214,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
 
     #PX
     #Shift move
+    # The feasible interval preserves all liability signs under the parameter-expanded shift.
     if shiftmv
         sig=10.0
         mu = rand(rng, Normal(0.0, sig))
@@ -220,6 +232,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     end
 
     #Scale move
+    # Positive rescaling changes latent scale without changing the binary observations.
     if scalemv
         sigma = rand(rng, InverseGamma(shape, scale))
         Y_new .*= sqrt(sigma)
@@ -276,6 +289,7 @@ function draw_betas(Y, r, c, mc, l, m, K, rng)
     return beta
 end
 
+# Draw continuous parameters conditional on the selected model for posterior output.
 function get_state(samp::ProbitBVSSampler)
 
     ps = samp.parState
@@ -285,6 +299,7 @@ function get_state(samp::ProbitBVSSampler)
     γ = samp.wTGSState.γ
     pips = samp.wTGSState.pips
     rates = samp.wTGSState.rates
+    # Reciprocal total move rate is the weighted-TGS importance weight.
     Z = 1.0/sum(rates)
 
     Y = copy(ps.Y)
@@ -313,6 +328,7 @@ function get_state(samp::ProbitBVSSampler)
     bs = draw_betas(Y, r, c, mc, l, m, K, rng)
     beta = zeros(size(pips,1))
 
+    # Expand active coefficients back into the full predictor coordinate system.
     beta[qc.i1_set[1:(l-1)]] .= bs[1:(l-1)]
     icept = bs[l]
     u = bs[(l+1):end]
@@ -324,6 +340,7 @@ function is_adapted(samp::ProbitBVSSampler)
     return samp.isadapted
 end
 
+# Three stages tune global step size, relative parameter scales, then global step size again.
 mutable struct RWMAdaptor
     stage_len::Int
     buffer_len::Int
@@ -359,6 +376,7 @@ function adapt!(adaptor::RWMAdaptor, state::Array{Float64,1}, acc::Int)
     adaptor.n_acc += acc
     adaptor.steps += 1
 
+    # Stages 1 and 3 target acceptance; stage 2 estimates relative marginal scales.
     if adaptor.stage == 1 || adaptor.stage ==3
         accr = adaptor.n_acc / (adaptor.buffer_it)
         adaptor.dt = max(adaptor.dt + 1.0*(accr - 0.22)/sqrt(adaptor.steps), 0.001)
@@ -367,6 +385,7 @@ function adapt!(adaptor::RWMAdaptor, state::Array{Float64,1}, acc::Int)
         adaptor.sums .+= state
     end
 
+    # Retain a rolling half-window for the acceptance-rate estimate.
     if adaptor.buffer_it >= adaptor.buffer_len
         adaptor.n_acc = div(adaptor.n_acc, 2)
         adaptor.buffer_it = div(adaptor.buffer_it, 2)
