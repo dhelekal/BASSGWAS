@@ -260,8 +260,10 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     det_curr = logabsdet(AChol)[1]
     det_curr += scache.cdet + (d-1)*log(c) + log(mc)
 
-    _inc_up2!(ssq, dets,
-        c, AChol, QX1, QX, FX1, X1tX0, sinv)
+    if (d != paug)
+        _inc_up2!(ssq, dets,
+            c, AChol, QX1, QX, FX1, X1tX0, sinv)
+    end
 
     _inc_down2!(view(ssq, idx1), view(dets, idx1), 
         c, Ainv, X1CinvX1, FX1)
@@ -463,7 +465,7 @@ function comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta
     γ = length(idx1)
     prior_curr = _inc_prior(γ, p, alpha, beta)
     # Compute prior changes for adding or removing one included predictor.
-    lpr_incl = _inc_prior(γ+1, p, alpha, beta) - prior_curr
+    lpr_incl = γ < p ? _inc_prior(γ+1, p, alpha, beta) - prior_curr : 0.0
     lpr_excl = γ > 0 ? _inc_prior(γ-1, p, alpha, beta) - prior_curr : -Inf64
     
     n=size(llrs,1)
