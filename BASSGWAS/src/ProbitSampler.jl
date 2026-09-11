@@ -12,7 +12,29 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# Owns the discrete model, latent liabilities, low-rank caches, and adaptation state.
+"""
+    ProbitBVSSampler
+
+Mutable sampler for Bayesian variable selection in a probit mixed model.
+
+The sampler owns the discrete inclusion state, latent liabilities, low-rank
+random-effect caches, continuous variance parameters, adaptation state, and
+random-number generator.
+
+# Fields
+- `parState`: Current model data and continuous parameters.
+- `scache`, `qcache`: Low-rank covariance and active-design caches.
+- `wTGSState`: Weighted tempered Gibbs variable-selection state.
+- `loglik`: Collapsed likelihood evaluator.
+- `T`: Number of completed transitions.
+- `naux`: Reserved auxiliary-transition counter.
+- `nadapt`, `isadapted`: Adaptation horizon and completion flag.
+- `adapt_xi`, `xi_targ`: Auxiliary-intensity adaptation controls.
+- `sample_c`: Whether to sample the predictor-effect variance.
+- `adaptor`: Random-walk Metropolis adaptor.
+- `shape`, `scale`: Inverse-gamma latent-scale hyperparameters.
+- `rng`: Random-number generator advanced by sampling operations.
+"""
 mutable struct ProbitBVSSampler{Tp, Tc, Ts, Tk, Tl, Ti, Tb, Tn, Ta, Tr}
     parState::Tp
     scache::Tc
@@ -32,6 +54,38 @@ mutable struct ProbitBVSSampler{Tp, Tc, Ts, Tk, Tl, Ti, Tb, Tn, Ta, Tr}
     rng::Tr
 end
 
+"""
+    ProbitBVSSampler(X, Y, U, S, alpha, beta; kwargs...)
+
+Construct a weighted-TGS sampler for a binary probit variable-selection model
+with low-rank correlated random effects.
+
+`X` is an `n × p` predictor matrix, `Y` is a length-`n` integer response, `U`
+is an `n × k` covariance-eigenvector matrix, and `S` contains its `k`
+eigenvalues. Positive response values are treated as successes and nonpositive
+values as failures. `alpha` and `beta` are the positive Beta-Binomial
+inclusion-prior hyperparameters. Retained eigenvalues and all variance or scale
+parameters must be positive, and the rows of `X`, `Y`, and `U` must align.
+
+# Keywords
+- `c=6.0`: Predictor-effect variance when `sample_c=false`; otherwise the
+  variance is initialized and sampled internally.
+- `sample_c=true`: Sample the predictor-effect variance.
+- `mcinit=100.0`: Intercept variance.
+- `eps=5.0`: Weighted-TGS regularization weight.
+- `nadapt=10000`: Number of transitions used for adaptation.
+- `xi_init=5.0`: Initial auxiliary-update intensity.
+- `adapt_xi=true`: Adapt the auxiliary-update intensity during warm-up.
+- `xi_targ=0.25`: Target fraction of total move intensity assigned to the
+  auxiliary update.
+- `nu=5.0`, `lambda=0.6`: Residual-scale prior degrees of freedom and scale.
+- `rng=Random.default_rng()`: Random-number generator owned and advanced by
+  the sampler.
+
+The initial predictor model is empty, with an intercept always included.
+Construction draws initial latent liabilities and positive variance values, so
+it advances `rng`.
+"""
 function ProbitBVSSampler(X::AbstractMatrix{Tx}, Y::AbstractVector{Ty}, U::AbstractMatrix{Tx}, S::AbstractVector{Tx},
     alpha, beta; c=6.0, sample_c=true, mcinit=100.0, eps=5.0, nadapt=10000, xi_init = 5.0, adapt_xi=true, xi_targ=0.25, nu=5.0, lambda=0.6, rng=Random.default_rng()) where {Tx<: Real, Ty<:Integer}
     
@@ -69,7 +123,17 @@ function ProbitBVSSampler(X::AbstractMatrix{Tx}, Y::AbstractVector{Ty}, U::Abstr
     return ProbitBVSSampler(parState, cache, tgsstate, qcache, loglik, 0, 0, nadapt, !adapt_xi, adapt_xi, xi_targ, sample_c, adaptor, shape, scale, rng)
 end
 
-# Warm-up refreshes latent and continuous state; later steps also permit predictor toggles.
+"""
+    next_step!(samp::ProbitBVSSampler)
+
+Advance `samp` by one weighted-TGS transition.
+
+The first eleven transitions update only latent and continuous quantities.
+Subsequent transitions select either a predictor toggle or an auxiliary Gibbs
+and Metropolis update according to the current move intensities. When enabled,
+adaptation is disabled once the transition count exceeds `nadapt`. The sampler
+and its RNG are mutated; the return value is not part of the public interface.
+"""
 function next_step!(samp::ProbitBVSSampler)
     if samp.T > 10
         next_flip = sample_next2(samp.wTGSState, samp.rng)
@@ -80,7 +144,6 @@ function next_step!(samp::ProbitBVSSampler)
             gibbs_CG!(samp)
             update_state2!(samp.wTGSState, samp.parState, samp.scache, samp.qcache, samp.loglik)
         end
-        #Adapt xi
         # Target the auxiliary update's share of the total move intensity.
         if !samp.isadapted && samp.adapt_xi
             xi_targ = samp.xi_targ
@@ -102,6 +165,16 @@ function next_step!(samp::ProbitBVSSampler)
         @warn "Warning: The number of active variants has exceed 100. Number of active variants: $(n_active). If this warning appears repeatedly, the model is likely misspecified, or there is unmeasured confounding present!"
 end
 
+"""
+    gibbs_CG!(samp::ProbitBVSSampler)
+
+Update the sampler's continuous variances, Gaussian coefficients, and probit
+liabilities conditional on the selected predictor model.
+
+The transition combines adaptive random-walk Metropolis proposals with Gibbs
+draws and parameter-expanded shift and scale moves. It mutates `samp`, its
+caches, and its RNG.
+"""
 function gibbs_CG!(samp::ProbitBVSSampler)
     shiftmv = true 
     scalemv = true 
@@ -144,12 +217,12 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         dt = get_dt(adaptor)
         rwm_scales = get_scales(adaptor)
 
-        #jitter to ensure pd; 1e-4 -> 1e-8 on variance scale
+        # Reflective jitter keeps the proposed standard deviation positive.
         rprop = abs(rsqrt + i*randn(rng)*dt*rwm_scales[1] - 1e-4) + 1e-4
         cprop = csqrt
 
         if samp.sample_c
-            #jitter to ensure pd; 1e-4 -> 1e-8 on variance scale
+            # Apply the same positive-scale safeguard to the predictor effect.
             cprop = abs(csqrt + i*randn(rng)*dt*rwm_scales[2] - 1e-4) + 1e-4
         end
 
@@ -191,15 +264,14 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     K = [X V]
     Y_old = copy(Y)
     
-    #Draw unscaled Y and discard auxilliary scale parameter
-    # Work on a copy so this conditional scale draw only feeds the coefficient update.
+    # Draw an auxiliary residual scale on a copy used only for coefficients.
     if scalemv && scale1
         _ = draw_Ysigma!(Y_old, r_new, c_new, mc, shape, scale, X, XtX, UtX, U, S, rng)
     end
 
     beta = draw_betas(Y_old, r_new, c_new, mc, l, m, K, rng)
 
-    #Y_new are Y means, to be reused
+    # Reuse the fitted means as storage for the new latent liabilities.
     Y_new = K*beta
 
     # Resample liabilities from the half-line compatible with each observed outcome.
@@ -212,8 +284,6 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         end
     end
 
-    #PX
-    #Shift move
     # The feasible interval preserves all liability signs under the parameter-expanded shift.
     if shiftmv
         sig=10.0
@@ -231,7 +301,6 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         Y_new .-= mu_new
     end
 
-    #Scale move
     # Positive rescaling changes latent scale without changing the binary observations.
     if scalemv
         sigma = rand(rng, InverseGamma(shape, scale))
@@ -249,7 +318,15 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     updateSCache!(sc, ps)
 end
 
-#Draw sigma^2 | Y from a normal - inverse-gamma model and standardise Y := Y/sigma 
+"""
+    draw_Ysigma!(Y, r, c, mc, shape, scale, X, XtX, UtX, U, S, rng)
+
+Draw the residual variance conditional on `Y` under the normal-inverse-gamma
+model and standardize `Y` by the sampled standard deviation.
+
+`Y` is mutated in place, `rng` is advanced, and the sampled variance is
+returned.
+"""
 function draw_Ysigma!(Y, r, c, mc, shape, scale, X, XtX, UtX, U, S, rng)
     n = size(Y, 1)
     
@@ -263,20 +340,29 @@ function draw_Ysigma!(Y, r, c, mc, shape, scale, X, XtX, UtX, U, S, rng)
     return sigma
 end
 
-#Draw beta | Y from a normal - normal model
+"""
+    draw_betas(Y, r, c, mc, l, m, K, rng)
+
+Draw active predictor, intercept, and random-effect coefficients from their
+Gaussian conditional posterior.
+
+The first `l - 1` columns of `K` are active predictors, column `l` is the
+intercept, and the final `m` columns are random-effect basis vectors. The
+returned vector follows that same order and advances `rng`.
+"""
 function draw_betas(Y, r, c, mc, l, m, K, rng)
     
     Qinv = K'K
 
-    #Predictor precision
+    # Add predictor prior precisions to the active fixed-effect block.
     for i in 1:(l-1)
         Qinv[i,i] += 1.0/c
     end
 
-    #Intercept precision
+    # Use the separate intercept prior precision.
     Qinv[l,l] += 1.0/mc
 
-    #Random effect precision
+    # Add the shared random-effect prior precision.
     for i in (l+1):(m+l)
         Qinv[i,i] += 1.0/r
     end
@@ -289,7 +375,29 @@ function draw_betas(Y, r, c, mc, l, m, K, rng)
     return beta
 end
 
-# Draw continuous parameters conditional on the selected model for posterior output.
+"""
+    get_state(samp::ProbitBVSSampler)
+
+Draw continuous posterior quantities conditional on the sampler's current
+selected model and return a named tuple.
+
+The result contains:
+- `γ`: Current binary inclusion vector.
+- `pips`: Current conditional predictor-inclusion probabilities.
+- `icept`: Intercept draw.
+- `beta`: Length-`p` predictor-effect draw with zeros at inactive positions.
+- `u`: Random-effect coefficient draw in the retained eigenbasis.
+- `Y`: Standardized latent-liability draw.
+- `sigma`: Residual-variance draw used to standardize `Y`.
+- `r`: Current random-effect variance multiplier.
+- `c`: Current predictor-effect variance.
+- `Z`: Weighted-TGS importance weight, the reciprocal total move intensity.
+
+`γ` and `pips` alias the sampler's internal arrays; callers that retain them
+across transitions should copy them. Other returned arrays are newly
+allocated. The sampler's RNG is advanced, but its model state is otherwise
+unchanged.
+"""
 function get_state(samp::ProbitBVSSampler)
 
     ps = samp.parState
@@ -323,7 +431,6 @@ function get_state(samp::ProbitBVSSampler)
     m = size(V, 2)
     K = [X V]
     
-    #
     sigma = draw_Ysigma!(Y, r, c, mc, shape, scale, X, XtX, UtX, U, S, rng)
     bs = draw_betas(Y, r, c, mc, l, m, K, rng)
     beta = zeros(size(pips,1))
@@ -336,11 +443,38 @@ function get_state(samp::ProbitBVSSampler)
     return (γ=γ, pips=pips, icept=icept, beta=beta, u=u, Y=Y, sigma=sigma, r=r, c=c, Z=Z)
 end
 
+"""
+    is_adapted(samp::ProbitBVSSampler)
+
+Return the sampler's adaptation-completion flag.
+
+The flag is initialized to `true` when auxiliary-intensity adaptation is
+disabled. Otherwise it becomes `true` once the transition count exceeds
+`nadapt`.
+"""
 function is_adapted(samp::ProbitBVSSampler)
     return samp.isadapted
 end
 
-# Three stages tune global step size, relative parameter scales, then global step size again.
+"""
+    RWMAdaptor
+
+Three-stage adaptor for random-walk Metropolis proposals.
+
+Stages one and three tune the global proposal step toward the target acceptance
+rate. Stage two estimates relative marginal scales for the sampled variance
+parameters.
+
+# Fields
+- `stage_len`: Number of updates in each of the first two adaptation stages.
+- `buffer_len`, `buffer_it`: Rolling acceptance-window length and position.
+- `stage`, `steps`: Current stage and updates completed within it.
+- `n_acc`: Accepted proposals retained in the rolling window.
+- `n_var`: Number of jointly adapted variables.
+- `dt`: Global proposal step size.
+- `scales`: Relative proposal scale for each variable.
+- `sums`, `sums_sq`: Stage-two moment accumulators.
+"""
 mutable struct RWMAdaptor
     stage_len::Int
     buffer_len::Int
@@ -355,6 +489,16 @@ mutable struct RWMAdaptor
     sums_sq::Array{Float64,1}
 end
 
+"""
+    RWMAdaptor(n_var::Int, stage_len::Int)
+
+Construct an adaptor for `n_var` variables with equal initial scales and global
+step size `0.1`.
+
+The first two adaptation stages contain `stage_len` updates each. The third
+stage continues tuning the global step until the owning sampler ends
+adaptation.
+"""
 function RWMAdaptor(n_var::Int, stage_len::Int)
     buffer_len = div(stage_len,2)
     RWMAdaptor(
@@ -371,6 +515,15 @@ function RWMAdaptor(n_var::Int, stage_len::Int)
         zeros(Float64, n_var))
 end
 
+"""
+    adapt!(adaptor::RWMAdaptor, state, acc)
+
+Update proposal adaptation from the current parameter `state` and acceptance
+indicator `acc`.
+
+The adaptor is mutated in place. During the middle stage, empirical variances
+set normalized relative proposal scales with a small positive floor.
+"""
 function adapt!(adaptor::RWMAdaptor, state::Array{Float64,1}, acc::Int)
     adaptor.buffer_it += 1
     adaptor.n_acc += acc
@@ -410,10 +563,22 @@ function adapt!(adaptor::RWMAdaptor, state::Array{Float64,1}, acc::Int)
     end
 end
 
+"""
+    get_scales(adaptor::RWMAdaptor)
+
+Return the current vector of relative proposal scales.
+
+The returned vector aliases storage owned by `adaptor`.
+"""
 function get_scales(adaptor::RWMAdaptor)
     return adaptor.scales
 end
 
+"""
+    get_dt(adaptor::RWMAdaptor)
+
+Return the adaptor's current global proposal step size.
+"""
 function get_dt(adaptor::RWMAdaptor)
     return adaptor.dt
 end

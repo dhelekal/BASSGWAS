@@ -12,23 +12,54 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# Weighted tempered Gibbs state with cached quantities for every one-predictor toggle.
+"""
+    wTGSState2
+
+Mutable weighted tempered Gibbs sampling state for Bayesian variable
+selection.
+
+The state stores the current binary inclusion vector and cached posterior
+quantities for every model reached by toggling one predictor. The intercept is
+handled separately and is not represented in `γ`.
+
+# Fields
+- `p`: Number of selectable predictors.
+- `γ`: Current binary predictor-inclusion vector.
+- `dets`, `ssq`: Collapsed likelihood terms for one-toggle alternatives.
+- `llrs`: Posterior log ratio of each toggled model to the current model.
+- `pips`: Conditional predictor-inclusion probabilities.
+- `conds`: Conditional probability of each predictor's current state.
+- `rates`, `rsums`: Move intensities and their cumulative sums; the final
+  entry represents the auxiliary continuous-state update.
+- `ll_curr`: Collapsed log likelihood of the current model.
+- `xi`: Auxiliary-update intensity.
+- `eps`: Weighted-TGS regularization weight.
+"""
 mutable struct wTGSState2{Tn, Tg, Tv, Tr}
-    p::Tn #number of covariates
-    γ::Tg #inclusion state vector
-    dets::Tv #likelihood determinants
-    ssq::Tv #likelihood quadratic form
-    llrs::Tv #log likelihood ratio
-    pips::Tv #gamma PIPs 
-    conds::Tv #gamma conditionals
-    rates::Tv #move rates
-    rsums::Tv #cummulative rate sums
-    ll_curr::Tr #Current likelihood
-    xi::Tr #Auxilliary move weight
-    eps::Tr #wTGS weight
+    p::Tn
+    γ::Tg
+    dets::Tv
+    ssq::Tv
+    llrs::Tv
+    pips::Tv
+    conds::Tv
+    rates::Tv
+    rsums::Tv
+    ll_curr::Tr
+    xi::Tr
+    eps::Tr
 end
 
-# Keep the intercept as the final active column while synchronizing the model and design cache.
+"""
+    flip_gamma!(state, ps, qcache, to_flip)
+
+Toggle predictor `to_flip` in `state` and synchronize `qcache` with the new
+active model.
+
+Indices are one-based predictor-column indices. The intercept remains the
+final active column in the augmented design. Both `state` and `qcache` are
+mutated.
+"""
 function flip_gamma!(state, ps, qcache, to_flip)
     newg = 1-state.γ[to_flip]
     state.γ[to_flip] = newg
@@ -43,7 +74,15 @@ function flip_gamma!(state, ps, qcache, to_flip)
     end 
 end
 
-# Initialize the current model together with all of its one-toggle likelihood terms and rates.
+"""
+    init_state2(loglik, ps, scache, γ0; eps=5.0, xi_init=1.0)
+
+Initialize a weighted-TGS model state and its predictor-toggle cache.
+
+`γ0` is a binary vector with one entry per predictor. The method evaluates the
+current collapsed likelihood, every one-predictor alternative, and the initial
+move intensities. It returns `(state, qcache)`.
+"""
 function init_state2(loglik::Aloglik, ps, scache, γ0::Array{Int64, 1}; eps = 5.0, xi_init = 1.0)
     p = length(γ0)
     alpha = ps.alpha
@@ -84,6 +123,14 @@ function init_state2(loglik::Aloglik, ps, scache, γ0::Array{Int64, 1}; eps = 5.
     return state, qcache
 end
 
+"""
+    update_state2!(state, ps, scache, qcache, loglik)
+
+Recompute the current collapsed likelihood, one-toggle alternatives, and move
+intensities after model or continuous-parameter changes.
+
+All cached arrays in `state` are updated in place; `qcache` is read only.
+"""
 function update_state2!(state, ps, scache, qcache, loglik::Aloglik)
 
     @unpack p, γ, dets, ssq, llrs, pips, conds, rates, rsums, xi, eps = state
@@ -106,6 +153,15 @@ function update_state2!(state, ps, scache, qcache, loglik::Aloglik)
     _ = cumsum!(rsums, rates)
 end
 
+"""
+    sample_next2(state, rng)
+
+Draw a one-based move index in proportion to the cumulative intensities in
+`state.rsums`.
+
+Indices `1:state.p` select predictor toggles, while `state.p + 1` selects the
+auxiliary continuous-state update.
+"""
 function sample_next2(state, rng)
     rsums = state.rsums
 
@@ -116,7 +172,15 @@ function sample_next2(state, rng)
     return move_idx
 end
 
-# Evaluate the collapsed likelihood of the active model from the low-rank covariance cache.
+"""
+    comp_ll2(scache, qcache, ps, γ, loglik)
+
+Evaluate the collapsed log likelihood of inclusion state `γ` from the
+low-rank covariance and active-design caches.
+
+The intercept is always included with variance `ps.mc`; active predictor
+effects use variance `ps.c`.
+"""
 function comp_ll2(scache, qcache, ps, γ, loglik::Aloglik)
     s = ps.s
     c = ps.c
@@ -149,7 +213,16 @@ function comp_ll2(scache, qcache, ps, γ, loglik::Aloglik)
     loglik(det_curr, ssq_curr)
 end
 
-# Compute the current model and every one-toggle alternative via Woodbury and rank-one identities.
+"""
+    comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
+
+Compute collapsed determinant and quadratic-form terms for the current model
+and every one-predictor toggle.
+
+Woodbury and rank-one identities avoid refactorizing a dense covariance for
+each candidate. `dets` and `ssq` are overwritten with alternative-model terms;
+the current model's `(det, ssq)` pair is returned.
+"""
 function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     
     paug = scache.paug
@@ -193,22 +266,29 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     _inc_down2!(view(ssq, idx1), view(dets, idx1), 
         c, Ainv, X1CinvX1, FX1)
 
-    ssq .+= qterm# + ssq_curr
+    # Add the covariance-only quadratic term to every toggle-specific update.
+    ssq .+= qterm
     dets .+= det_curr
 
     return det_curr, ssq_curr
 end
 
 
-# Evaluate predictor additions in parallel using active-model Schur complements.
-function _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, X1tX0, sinv)
-    ## Determinant Updates
-    # x_i' Cinv x_i forall i
+"""
+    _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, X1tX0, sinv)
 
+Fill addition-model updates for all predictors using Schur complements of the
+active-model factorization.
+
+Work is divided into thread-sized column blocks. `ssq` and `dets` are mutated
+in place.
+"""
+function _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, X1tX0, sinv)
     n = length(ssq)
     d = size(FX1, 2) + 1
 
-    U = AChol.U' \ FX1' # p x 1
+    # Solve once for the active-model contribution shared by every candidate.
+    U = AChol.U' \ FX1'
     quad_term = -dot(U,U) 
 
     AinvBs = copy(X1tX0)
@@ -227,9 +307,17 @@ function _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, X1tX0, sinv)
     end
 end
 
+"""
+    _up_blck2!(dets, ssq, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
+
+Evaluate one column block of predictor-addition determinant and quadratic-form
+updates.
+
+The supplied arrays are block views owned by `_inc_up2!`; `dets`, `ssq`, and
+`AinvBs` are overwritten in place.
+"""
 function _up_blck2!(dets, ssq, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
-    ## Determinant Updates
-    # x_i' Cinv x_i forall i
+    # Subtract each candidate's low-rank covariance contribution.
     @turbo for j in axes(QX,2)
         s = 0.0 
         for i in axes(QX,1)
@@ -266,7 +354,15 @@ function _up_blck2!(dets, ssq, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
     nothing
 end
 
-# Evaluate active-predictor removals by downdating the inverse active-model system.
+"""
+    _inc_down2!(ssq, dets, c, Ainv, X1tCinvX1, FX1)
+
+Fill removal-model updates for active predictors by downdating the inverse
+active-model system.
+
+The intercept occupies the final row and column and is never removed. `ssq`
+and `dets` are mutated in place.
+"""
 function _inc_down2!(ssq, dets, c, Ainv, X1tCinvX1, FX1)
     p = size(ssq)[1]
     paug = size(Ainv)[2]
@@ -284,7 +380,6 @@ function _inc_down2!(ssq, dets, c, Ainv, X1tCinvX1, FX1)
         @batch for s in eachindex(chunks)
             chunk = chunks[s]
             for i in chunk
-                #icm = 1:paug .!= i
                 A0 = A0s[s]
                 b = bs[s]
                 y = ys[s]
@@ -310,7 +405,16 @@ function _inc_down2!(ssq, dets, c, Ainv, X1tCinvX1, FX1)
     nothing
 end
 
-# `conds` is the probability of the current state; `pips` is the conditional inclusion probability.
+"""
+    comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
+
+Compute weighted-TGS predictor move intensities from one-toggle log posterior
+ratios.
+
+`conds` receives the conditional probability of each predictor's current
+state, `pips` receives conditional inclusion probabilities, and `rates`
+receives the regularized move intensities. All three arrays are mutated.
+"""
 function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
     p = length(conds)
     w = eps/p
@@ -345,12 +449,20 @@ function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
     nothing
 end
 
-# Store each toggle's posterior log ratio relative to the current model.
+"""
+    comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta)
+
+Fill `llrs` with each one-toggle model's log posterior ratio relative to the
+current model.
+
+The calculation combines collapsed likelihood differences with the
+Beta-Binomial prior ratio implied by `alpha` and `beta`.
+"""
 function comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta)
 
     γ = length(idx1)
     prior_curr = _inc_prior(γ, p, alpha, beta)
-    #inclusion prior ratios
+    # Compute prior changes for adding or removing one included predictor.
     lpr_incl = _inc_prior(γ+1, p, alpha, beta) - prior_curr
     lpr_excl = γ > 0 ? _inc_prior(γ-1, p, alpha, beta) - prior_curr : -Inf64
     
@@ -370,6 +482,13 @@ function comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta
     nothing
 end
 
+"""
+    _inc_prior(γ, p, alpha, beta)
+
+Return the integrated Beta-Bernoulli log prior, up to a model-independent
+constant, for a particular inclusion vector containing `γ` active entries
+among `p` predictors.
+"""
 function _inc_prior(γ, p, alpha, beta)
     alpha_N = γ + alpha
     beta_N = p - γ + beta
@@ -377,7 +496,15 @@ function _inc_prior(γ, p, alpha, beta)
 end
 
 
-# Explicit covariance calculation retained as a reference for the cached update path.
+"""
+    _update_state_test!(state, ps, scache, qcache, loglik; eps=5.0)
+
+Recompute a weighted-TGS state with explicit dense covariance calculations.
+
+This test-only reference implementation mutates `state` and is used to verify
+the cached Woodbury and rank-one update path. It returns `logabsdet(C)` for the
+explicit covariance matrix.
+"""
 function _update_state_test!(state, ps, scache, qcache, loglik::Aloglik; eps=5.0)
 
     @unpack p, γ, dets, ssq, llrs, pips, conds, rates, rsums = state
@@ -416,6 +543,14 @@ function _update_state_test!(state, ps, scache, qcache, loglik::Aloglik; eps=5.0
 end
 
 
+"""
+    _direct_comp(C, X, Y, c, mc, idx1, idx0, paug)
+
+Compute explicit collapsed determinant and quadratic-form terms for every
+one-predictor alternative to the active model.
+
+This dense reference routine returns `(dets, ssq)` in full predictor order.
+"""
 function _direct_comp(C, X, Y, c, mc, idx1, idx0, paug)
     dets = ones(paug-1)
     ssq = ones(paug-1)
@@ -436,6 +571,15 @@ function _direct_comp(C, X, Y, c, mc, idx1, idx0, paug)
     return dets, ssq
 end
 
+"""
+    _direct(C, c, mc, X, Y)
+
+Compute explicit collapsed log-determinant and quadratic-form terms for design
+matrix `X`, response `Y`, and covariance `C`.
+
+All columns except the final intercept use prior variance `c`; the intercept
+uses `mc`. The function returns `(det, qform)`.
+"""
 function _direct(C, c, mc, X, Y)
     n = size(X, 2)
     diagshift = c*ones(n)
@@ -446,6 +590,14 @@ function _direct(C, c, mc, X, Y)
     return det, qform
 end
 
+"""
+    _ssq_direct(Y1, Y2, r, c, mc, X, U, S)
+
+Evaluate the covariance-adjusted bilinear form between `Y1` and `Y2` by
+explicitly factorizing the full covariance.
+
+This reference implementation fixes the residual variance multiplier at one.
+"""
 function _ssq_direct(Y1, Y2, r, c, mc, X, U, S)
     m = size(X, 1)
     n = size(X, 2)
@@ -460,6 +612,12 @@ function _ssq_direct(Y1, Y2, r, c, mc, X, U, S)
     return qform
 end
 
+"""
+    _det_direct(r, c, mc, X, U, S)
+
+Evaluate the collapsed model log determinant by explicitly factorizing the
+full covariance, with residual variance multiplier fixed at one.
+"""
 function _det_direct(r, c, mc, X, U, S)
     m = size(X, 1)
     n = size(X, 2)
@@ -473,7 +631,15 @@ function _det_direct(r, c, mc, X, U, S)
     return logabsdet(Q)[1]
 end
 
-#Calculation from chipman george mcculloch 2012, pg80
+"""
+    _direct_ll(Y, r, c, mc, X, U, S, nu, lambda)
+
+Evaluate the collapsed Student-t log likelihood through an explicit Gaussian
+coefficient precision factorization.
+
+The calculation is retained as a dense reference for the cached likelihood
+implementation and fixes the residual variance multiplier at one.
+"""
 function _direct_ll(Y, r, c, mc, X, U, S, nu, lambda)
 
     V = U*Diagonal(sqrt.(S))
@@ -499,7 +665,15 @@ function _direct_ll(Y, r, c, mc, X, U, S, nu, lambda)
     return det1+det2-0.5*(n+nu)*log(nu*lambda + ssq)
 end
 
-# Low-rank Woodbury form of the covariance-adjusted bilinear term between two responses.
+"""
+    _comp_ssq(Y1, Y2, r, c, mc, X, XtX, UtX, U, S)
+
+Evaluate the covariance-adjusted bilinear form between responses `Y1` and
+`Y2` using a low-rank Woodbury representation.
+
+`XtX` and `UtX` must correspond to the supplied active design `X`. Residual
+variance is fixed at one.
+"""
 function _comp_ssq(Y1, Y2, r, c, mc, X, XtX, UtX, U, S)
 
     d = similar(S)
@@ -534,7 +708,15 @@ function _comp_ssq(Y1, Y2, r, c, mc, X, XtX, UtX, U, S)
     return ssq
 end
 
-# Quadratic-form specialization used by the latent-scale update.
+"""
+    _comp_ssq(Y, r, c, mc, X, XtX, UtX, U, S)
+
+Evaluate the covariance-adjusted quadratic form of `Y` using a low-rank
+Woodbury representation.
+
+This specialization avoids duplicated work when both responses in the
+bilinear form are identical. Residual variance is fixed at one.
+"""
 function _comp_ssq(Y, r, c, mc, X, XtX, UtX, U, S)
 
     d = similar(S)
@@ -564,7 +746,15 @@ function _comp_ssq(Y, r, c, mc, X, XtX, UtX, U, S)
     return ssq
 end
 
-# Return the collapsed quadratic and determinant terms for variance proposals.
+"""
+    _comp_llterms(Y, r, c, mc, X, XtX, UtX, YtU, S)
+
+Compute the collapsed response quadratic form and log determinant for proposed
+random-effect and predictor variances.
+
+The method reuses active-design and low-rank cross-products and returns
+`(ssq, det)`. Residual variance is fixed at one.
+"""
 function _comp_llterms(Y, r, c, mc, X, XtX, UtX, YtU, S)
     d = similar(S)
 

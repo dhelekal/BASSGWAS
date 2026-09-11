@@ -12,7 +12,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-#in place 'v' plus 'a' times squared column sums
+"""
+    _vpacnormsq!(v, a, X, Y)
+
+Accumulate `a * sum(X[:, i] .* Y[:, i])` into each element `v[i]`.
+
+`X` and `Y` must have identical dimensions, and `v` must have one element per
+matrix column. The update is performed in place and the function returns
+`nothing`.
+"""
 function _vpacnormsq!(v, a, X, Y)
     size(X) != size(Y) && throw(ArgumentError("Array dimensions must match"))
     ncol = size(X,2)
@@ -23,6 +31,14 @@ function _vpacnormsq!(v, a, X, Y)
     end
 end
 
+"""
+    _copyto_loo!(dest::AbstractMatrix, A::AbstractMatrix, i)
+
+Copy `A` into `dest` while omitting row and column `i`.
+
+`dest` must be one row and one column smaller than `A`. Indices use Julia's
+one-based convention, and `dest` is mutated in place.
+"""
 function _copyto_loo!(dest::AbstractMatrix, A::AbstractMatrix, i)
     m = size(A,1) 
     n = size(A,2)
@@ -39,6 +55,14 @@ function _copyto_loo!(dest::AbstractMatrix, A::AbstractMatrix, i)
 
 end
 
+"""
+    _copyto_loo!(dest::AbstractVector, A::AbstractVector, i)
+
+Copy `A` into `dest` while omitting element `i`.
+
+`dest` must contain one fewer element than `A`. Indices use Julia's one-based
+convention, and `dest` is mutated in place.
+"""
 function _copyto_loo!(dest::AbstractVector, A::AbstractVector, i)
     m = size(A,1) 
     size(dest,1) != (m-1) && 

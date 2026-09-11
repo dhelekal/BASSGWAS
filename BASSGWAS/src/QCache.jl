@@ -12,18 +12,43 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# Cache structure for rank 1 updates to the matrix X1'X0
+"""
+    QCache
+
+Cache the active design matrix and cross-products used by predictor-toggle
+updates.
+
+The intercept is included in `i1_set` and remains the final active column.
+
+# Fields
+- `i1_set`: Sorted indices of active augmented-design columns.
+- `i0_set`: Sorted indices of inactive predictor columns.
+- `X1`: Active columns of the augmented design matrix.
+- `XtX`: Cross-product of `X1` with every augmented-design column.
+- `XtXb`: Reusable buffer holding the previous cross-product.
+- `d`: Number of active columns, including the intercept.
+- `p`: Number of inactive predictors.
+"""
 mutable struct QCache{Ti, Tm, Tn}
-    i1_set::Ti #active indices
-    i0_set::Ti #inactive indices
+    i1_set::Ti
+    i0_set::Ti
     X1::Tm
     XtX::Tm 
     XtXb::Tm
 
-    d::Tn #number of active indices
-    p::Tn #number of inactive indices
+    d::Tn
+    p::Tn
 end
 
+"""
+    QCache(ps, i1_set, i0_set)
+
+Construct a predictor-toggle cache from `ps.Xaug` and the supplied active and
+inactive one-based column indices.
+
+`i1_set` must include the intercept index. The cache owns newly allocated
+matrix data but retains the supplied index collections.
+"""
 function QCache(ps, i1_set, i0_set)
     d = length(i1_set)
     p = length(i0_set)
@@ -35,18 +60,37 @@ function QCache(ps, i1_set, i0_set)
     QCache(i1_set, i0_set, X1, XtX, copy(XtX), d, p)
 end
 
+"""
+    get_XtX(qc::QCache)
+
+Return the cached cross-product between active and augmented-design columns.
+
+The returned matrix aliases storage owned by `qc`.
+"""
 function get_XtX(qc::QCache)
     return qc.XtX
 end
 
+"""
+    get_X1(qc::QCache)
+
+Return the cached active design matrix, including the final intercept column.
+
+The returned matrix aliases storage owned by `qc`.
+"""
 function get_X1(qc::QCache)
     return qc.X1
 end
 
-function get_X(qc::QCache)
-    return qc.X
-end
+"""
+    add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
 
+Update `qc` after activating predictor column `index`.
+
+The supplied index sets describe the post-toggle model. The method inserts one
+new cross-product row in sorted active-index order, refreshes `X1`, mutates all
+cache metadata, and returns `nothing`.
+"""
 function add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
     d = qc.d
     p = qc.p
@@ -77,6 +121,15 @@ function add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
     nothing;
 end
 
+"""
+    remove_active_QC(qc, ps, index, i1_set_new, i0_set_new)
+
+Update `qc` after deactivating predictor column `index`.
+
+The supplied index sets describe the post-toggle model. The method removes the
+corresponding cross-product row, refreshes `X1`, mutates all cache metadata,
+and returns `nothing`.
+"""
 function remove_active_QC(qc, ps, index, i1_set_new, i0_set_new)
     d = qc.d
     p = qc.p

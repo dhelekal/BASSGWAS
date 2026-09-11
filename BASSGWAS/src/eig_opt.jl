@@ -12,6 +12,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+"""
+    upd_mlik_arr(mlik, p_success, p_fail, idx)
+
+Extend a Monte Carlo outcome-likelihood table with both binary outcomes for
+candidate `idx`.
+
+If `mlik` has one row per posterior draw and `k` outcome-pattern columns, the
+returned array has `2k` columns. The first half multiplies by success
+probabilities and the second half by failure probabilities. Inputs are not
+mutated.
+"""
 function upd_mlik_arr(mlik, p_success, p_fail, idx)
     n_it = size(mlik, 1)
     k = size(mlik, 2)
@@ -34,6 +45,13 @@ function upd_mlik_arr(mlik, p_success, p_fail, idx)
     mliknew
 end
 
+"""
+    comp_mlik(mlik_arr, Z)
+
+Compute the sum of `p * log(p)` over outcome patterns represented by
+`mlik_arr`, using weighted posterior draws `Z` to estimate each marginal
+pattern probability.
+"""
 function comp_mlik(mlik_arr, Z)
     n_it = size(mlik_arr, 1)
     n_t = size(mlik_arr, 2)
@@ -51,8 +69,17 @@ function comp_mlik(mlik_arr, Z)
     sum(psums)
 end
 
+"""
+    comp_mlik_next(tmp, mlik_arr, m1Z)
+
+Compute the marginal `p * log(p)` sum after tentatively adding one binary
+design point.
+
+`tmp` is reusable output storage and is overwritten. `m1Z` contains the two
+importance-weighted likelihood factors for the candidate.
+"""
 function comp_mlik_next(tmp, mlik_arr, m1Z)
-    # This is \sum_y p(y)log(p(y)) where p(y) is mc estimate of prob(y=y)
+    # Marginalize posterior draws to estimate each outcome-pattern probability.
     mul!(tmp, mlik_arr', m1Z)
     sl = 0.0
     for i in eachindex(tmp)
@@ -61,6 +88,21 @@ function comp_mlik_next(tmp, mlik_arr, m1Z)
     sl
 end
 
+"""
+    CIDEIG
+
+Immutable state for conditional-independence expected-information-gain design
+selection.
+
+# Fields
+- `p_success`, `p_fail`: Posterior-draw probabilities for each remaining target.
+- `mlik_arr`: Joint outcome likelihoods for the currently selected design.
+- `cond_ent`: Per-target expected conditional `p * log(p)` contributions.
+- `Z`: Weighted-TGS importance weights for posterior draws.
+- `mlik1Z`: Precomputed weighted success and failure factors for each target.
+- `comb_ent`: Accumulated conditional contribution for the selected design.
+- `eig`: Expected information gain of the selected design.
+"""
 struct CIDEIG{Tx}
     p_success::AbstractMatrix{Tx}
     p_fail::AbstractMatrix{Tx}
@@ -72,6 +114,17 @@ struct CIDEIG{Tx}
     eig::Tx
 end
 
+"""
+    CIDEIG(idx_rem, Ufull, Sfull, X, icept, betas, us, Z)
+
+Initialize expected-information-gain state for the candidate targets in
+`idx_rem`.
+
+`idx_rem` contains one-based target indices into the prediction matrices.
+`icept`, `betas`, `us`, and `Z` contain aligned posterior draws. Predictive
+success and failure probabilities and all one-candidate likelihood factors are
+precomputed for subsequent greedy selection.
+"""
 function CIDEIG(idx_rem::Array{Ty, 1}, Ufull::AbstractMatrix{Tx}, 
         Sfull::AbstractVector{Tx}, X::AbstractMatrix{Tx}, 
         icept::AbstractVector{Tx}, betas::AbstractMatrix{Tx}, 
@@ -105,6 +158,15 @@ function CIDEIG(idx_rem::Array{Ty, 1}, Ufull::AbstractMatrix{Tx},
     CIDEIG(p1, p0, mlik_arr, cond_ent, Z, mlik1Z, 0.0, 0.0)
 end
 
+"""
+    eig(ec::CIDEIG, idx_set)
+
+Return the expected information gain from adding each candidate position in
+`idx_set` to the design represented by `ec`.
+
+Candidate positions index the columns stored in `ec`, rather than the original
+target identifiers supplied to `CIDEIG`.
+"""
 function eig(ec::CIDEIG, idx_set)
     k = size(ec.mlik_arr, 2)
     n_y = size(idx_set,1)
@@ -129,6 +191,15 @@ function eig(ec::CIDEIG, idx_set)
     return clikvals - mlikvals
 end
 
+"""
+    add_next_idx(ec::CIDEIG, idx)
+
+Return a new EIG state with candidate position `idx` appended to the selected
+design.
+
+The joint likelihood table and cumulative objective are expanded without
+mutating `ec`.
+"""
 function add_next_idx(ec::CIDEIG, idx)
     mlik_arr_new = upd_mlik_arr(ec.mlik_arr, ec.p_success, ec.p_fail, idx)
     comb_ent_new = ec.comb_ent + ec.cond_ent[idx]
@@ -137,6 +208,29 @@ function add_next_idx(ec::CIDEIG, idx)
     CIDEIG(ec.p_success, ec.p_fail, mlik_arr_new, ec.cond_ent, ec.Z, ec.mlik1Z, comb_ent_new,comb_ent_new-mliksum)
 end
 
+"""
+    optimize_design(idx_rem, Ufull, Sfull, X, icept, betas, us, Z, batch_sz;
+                    randdes=false, idx_fixed=Int[])
+
+Select a batch of distinct experimental targets by greedy expected information
+gain.
+
+`idx_rem` contains the one-based target indices eligible for selection.
+`Ufull`, `Sfull`, and `X` describe every prediction target; `icept`, `betas`,
+and `us` contain aligned posterior draws; and `Z` contains their weighted-TGS
+importance weights. `batch_sz` must not exceed the number of candidates.
+
+When `idx_fixed` is nonempty, its target indices are forced into the beginning
+of the batch in the supplied order; each fixed index must occur in `idx_rem`
+and fixed indices must be distinct. Remaining targets maximize incremental
+expected information gain unless `randdes=true`, in which case they are chosen
+uniformly using Julia's default RNG. Candidates are removed after selection,
+so the result contains no repeated target.
+
+Return `(batch, obj)`, where `batch` contains original target indices and `obj`
+is the cumulative expected information gain after the final selection. Inputs
+are not mutated.
+"""
 function optimize_design(idx_rem, Ufull, Sfull, X, icept, betas, us, Z, batch_sz; randdes=false, idx_fixed = Array{Int}(undef,0))
     n_Y = size(idx_rem, 1)
     ec = CIDEIG(idx_rem, Ufull, Sfull, X, icept, betas, us, Z)
@@ -161,15 +255,28 @@ function optimize_design(idx_rem, Ufull, Sfull, X, icept, betas, us, Z, batch_sz
         batch[i] = maxind
         e = obj[maxi]
 
-        deleteat!(idx_set, maxi) #no biological replicates
+        # Remove the target so a batch cannot contain biological replicates.
+        deleteat!(idx_set, maxi)
         ec = add_next_idx(ec, maxind)
     end
     return (batch=idx_rem[batch], obj=e)
 end
 
 
+"""
+    comp_eig(idx_design, idx_obs, Uobs, Sobs, Ufull, Sfull, X, icept,
+             betas, us, rs, Z, batch_sz)
+
+Legacy helper intended to evaluate the expected information gain of a fixed
+design.
+
+!!! warning
+    The helper currently calls a `CIDEIG` constructor signature that is not
+    implemented, so it raises a `MethodError` when invoked.
+"""
 function comp_eig(idx_design, idx_obs, Uobs, Sobs, Ufull, Sfull, X, icept, betas, us, rs, Z, batch_sz)
     n_Y = size(idx_design, 1)
+    # TODO: Reconcile this legacy call with the implemented `CIDEIG` constructor.
     ec = CIDEIG(idx_obs, idx_design, Uobs, Sobs, Ufull, Sfull, X, icept, betas, us, rs, Z)
     e = 0.0
     for i in 1:n_Y

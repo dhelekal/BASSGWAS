@@ -32,13 +32,14 @@ using BASSGWAS: ParState2,
 using LinearAlgebra
 using Random
 
+# Fix random and BLAS execution state for reproducible numerical comparisons.
 Random.seed!(1)
 BLAS.set_num_threads(1)
 
-# Linear algebra tests
-# Use explicit calculations as a ground truth
+# Compare cached low-rank identities with explicit dense linear algebra.
 let n = 300, d=300, p=10000, alpha = 0.5, beta = 0.3, nu=3.0, lambda=2.0, r=5.0, c=60.0, s=1.0, mc=100.0
 
+    # Construct a positive-definite covariance and a high-dimensional design.
     K = randn(n,n);
     K = Hermitian(K'K + Diagonal(ones(n))*0.001);
 
@@ -60,16 +61,18 @@ let n = 300, d=300, p=10000, alpha = 0.5, beta = 0.3, nu=3.0, lambda=2.0, r=5.0,
 
     loglik = TDistLogLik(nu, lambda, n)
 
+    # Initialize identical cached and reference states from the same model.
     s2, qc2 = init_state2(loglik, parState2, sc, γ0)
     s3, qc3 = init_state2(loglik, parState2, sc, γ0)
 
-    #update_state!(s1, parState1, cc)
+    # Check all one-toggle likelihood terms against the dense implementation.
     update_state2!(s2, parState2, sc, qc2, loglik)
     _update_state_test!(s3, parState2, sc, qc2, loglik)
 
     @test s2.dets ≈ s3.dets
     @test s2.ssq ≈ s3.ssq
 
+    # Rebuilding the covariance cache must preserve the same likelihood terms.
     updateSCache!(sc, parState2)
     update_state2!(s2, parState2, sc, qc2, loglik)
 
@@ -79,6 +82,7 @@ let n = 300, d=300, p=10000, alpha = 0.5, beta = 0.3, nu=3.0, lambda=2.0, r=5.0,
     flip_gamma!(s2, parState2, qc2, 301)
     flip_gamma!(s3, parState2, qc3, 301)
 
+    # Validate likelihood agreement after changing the active predictor set.
     update_state2!(s2, parState2, sc, qc2, loglik)
     ll_curr2 = s2.ll_curr
     _update_state_test!(s3, parState2, sc, qc3,loglik)
@@ -93,6 +97,7 @@ let n = 300, d=300, p=10000, alpha = 0.5, beta = 0.3, nu=3.0, lambda=2.0, r=5.0,
     @test ll_curr2 ≈ ll_d
     @test ll_curr2 ≈ ll_dir
 
+    # Compare low-rank quadratic forms and determinants with dense factorizations.
     Xsq = get_X1(qc2)'*get_X1(qc2)
     ssq_gt = _ssq_direct(parState2.Y, parState2.Y, parState2.r, parState2.c, parState2.mc, get_X1(qc2), sc.U, sc.S)
     ssq_f = _comp_ssq(parState2.Y, parState2.Y, parState2.r, parState2.c, parState2.mc, get_X1(qc2), Xsq, sc.UtX[:, qc2.i1_set], sc.U, sc.S)
@@ -105,11 +110,13 @@ let n = 300, d=300, p=10000, alpha = 0.5, beta = 0.3, nu=3.0, lambda=2.0, r=5.0,
     @test ssq_gt ≈ ssq_c
     @test det_gt ≈ det_c
 
+    # Exercise the bilinear-form overload with distinct response vectors.
     ssq_gt = _ssq_direct(parState2.Y, ones(size(parState2.Y)), parState2.r, parState2.c, parState2.mc, get_X1(qc2), sc.U, sc.S)
     ssq_f = _comp_ssq(parState2.Y, ones(size(parState2.Y)), parState2.r, parState2.c, parState2.mc, get_X1(qc2), Xsq, sc.UtX[:, qc2.i1_set], sc.U, sc.S)
     
     @test ssq_gt ≈ ssq_f
 
+    # A changed response must refresh response-dependent cache entries correctly.
     parState2.Y = randn(n)
     updateSCache!(sc, parState2)
     update_state2!(s2, parState2, sc, qc2, loglik)

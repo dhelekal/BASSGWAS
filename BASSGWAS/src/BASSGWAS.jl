@@ -12,6 +12,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+"""
+    BASSGWAS
+
+Bayesian adaptive sampling and variable selection for binary responses.
+
+The package combines a weighted tempered Gibbs sampler for Bayesian variable
+selection under a probit mixed model with posterior-predictive utilities and a
+greedy expected-information-gain criterion for choosing experimental designs.
+Low-rank eigendecompositions represent correlated random effects throughout
+the sampling and prediction workflows.
+"""
 module BASSGWAS
 
 using LinearAlgebra
@@ -39,4 +50,4 @@ include("postpred.jl")
 export postpred, expand_randeff
 include("eig_opt.jl")
 export optimize_design
-end # module BASSGWAS
+end

@@ -13,4 +13,6 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 using SafeTestsets
+
+# Isolate package tests so their imports and random state do not leak globally.
 @safetestset "bvs tests" begin include("wtgs_tests.jl") end
