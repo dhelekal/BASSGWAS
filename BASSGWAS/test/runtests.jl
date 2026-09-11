@@ -13,6 +13,15 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 using SafeTestsets
+using Test
 
-# Isolate package tests so their imports and random state do not leak globally.
-@safetestset "bvs tests" begin include("wtgs_tests.jl") end
+# Keep failures in one group from preventing the remaining groups from running.
+# Each SafeTestset isolates imports, helper definitions, and local RNGs.
+@testset "BASSGWAS" begin
+    @safetestset "bvs tests" begin include("wtgs_tests.jl") end
+    @safetestset "Exact conditional posteriors" begin include("posterior_tests.jl") end
+    @safetestset "Update rates and transitions" begin include("rate_tests.jl") end
+    @safetestset "Numerical cache updates" begin include("cache_tests.jl") end
+    @safetestset "Continuous conditional draws" begin include("conditional_draw_tests.jl") end
+    @safetestset "Full-model regressions" begin include("boundary_regression_tests.jl") end
+end
