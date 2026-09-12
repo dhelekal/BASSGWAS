@@ -621,6 +621,8 @@ prepare_data.R --to_drop identifiers_to_drop.txt
 
 - Use experimental controls to reduce phenotyping noise. 
 
+- A high proportion of experiments returning no phenotype may compromise experimental design efficiency.
+
 - Set the allele frequency filter to a reasonable value. This should be organism specific. A frequency of $$5/N$$ or $$10/N$$ where N is the collection size is a good starting value.
 
 - When applying BASS-GWAS to a new collection or a new organism, run synthetic experiments (as in this tutorial) using known genotype/phenotype relationships to ensure proper data preparation.
