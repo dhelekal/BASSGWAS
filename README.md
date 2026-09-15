@@ -26,22 +26,36 @@
 
 
 ## Introduction
-BASS-GWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a framework for efficient bacterial genome-wide association studies (GWAS) that require phenotyping. BASS-GWAS can select batches of isolates from a large, sequenced collection for iterative experimental phenotyping. To do this, it combines a sparse whole-genome regression model with Bayesian adaptive experimental design. BASS-GWAS reduces the number of experimental measurements needed to power GWAS by incorporating information from past iterations and the variant distribution. See the [preprint](https://www.biorxiv.org/content/10.64898/2026.08.26.747358) for benchmarks and details.
+BASS-GWAS (Bayesian Adaptive Sequential Sampling for (bacterial) GWAS) is a framework for efficient bacterial genome-wide association studies (GWAS) that require phenotyping. BASS-GWAS can select batches of isolates from a large, sequenced collection for iterative experimental phenotyping. To do this, it combines a sparse whole-genome regression model with Bayesian adaptive experimental design. BASS-GWAS reduces the number of experimental measurements needed to power GWAS by incorporating information from past iterations and the variant distribution. 
 
 ### Workflow diagram
 
-<img src='docs/diagram.png' align="center" height="500" />
+<img src='docs/diagram.png' align="center" width="600" />
+
+### Why BASS-GWAS? 
+With large sequenced strain collections now common place, modern bacterial GWAS are often limited by the burden of experimental phenotyping. BASS-GWAS overcomes this limitation by reducing the total number of experiments required to power bacterial GWAS.
 
 BASS-GWAS is useful when:
 1. You want to find the genetic basis of some observed phenotypic variation.
 2. You have prior evidence of phenotypic variation.
-3. You need to do phenotyping yourself.
+3. You need to do the phenotyping yourself.
 4. You have access to a large sequenced collection of (at least several hundred) isolates you can phenotype.
 
-Additionally, the underlying sparse regression model can be used for fine-mapping **independently of experimental design functionality**. Currently, it supports only binary phenotypes. 
+In benchmarks using real-world traits, BASS-GWAS consistently recovered causal variants and loci with much fewer isolates tested when compared to random sampling.
+
+Additionally, the underlying sparse regression model can be used for fine-mapping **independently of experimental design functionality**. Currently, it supports only binary phenotypes.
+ 
+See the [preprint](https://www.biorxiv.org/content/10.64898/2026.08.26.747358) for benchmarks and details.
+
+### Power Benchmarks
+
+<img src='docs/powerplots.png' align="center" width="600" />
+
+Batch size of 8.
 
 ## Installation
-See the [tutorial](docs/tutorial.md) before use.
+
+Download this repository.
 
 ### Required dependencies
 The BASS-GWAS package requires `julia>=1.11`. The launcher scripts require the following packages:
@@ -62,7 +76,7 @@ The scripts in the `helper_scripts` directory require a working `R>=4.1.0` insta
 - `ape`
 
 ### Package installation
-Use the `julia` package manager to install BASS-GWAS from `github`:
+Use the `julia` package manager to install the current version of BASS-GWAS from `github`:
 
 ```using Pkg; Pkg.add(url="https://github.com/dhelekal/BASSGWAS", subdir="BASSGWAS")```
 
@@ -70,7 +84,7 @@ Use the `julia` package manager to install BASS-GWAS from `github`:
 BASS-GWAS requires a variant presence-absence file and a phylogeny that describes the population structure. **See the [tutorial](docs/tutorial.md) before use**.
 
 ### Data preprocessing
-To prepare the inputs for use with BASSGWAS use:
+To prepare the inputs for use with BASS-GWAS use:
 
 `prepare_data.R [variant_file.csv] [tree_file.nwk] --odir [OUTPUT_DIRECTORY] [--svd-threshold 0.99] [--af-threshold 0][--to-drop NAMES_TO_DROP.txt]` 
 
