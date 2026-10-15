@@ -73,3 +73,13 @@ concurrently with separate RNGs and compared with serial execution.
 covariance-adjusted design diagonal against the independent dense precision.
 Timing benchmarks are separate from correctness tests; see
 [`../benchmark/README.md`](../benchmark/README.md).
+
+
+## Expected information gain
+
+`eig_tests.jl` checks the Rao–Blackwellized estimator against direct mutual
+information computed by enumerating binary outcomes and weighted posterior
+draws. It covers immutable state updates, greedy and fixed selections,
+seeded random selections, ties, and empty/full batches. An alternate
+`EIGest` subtype verifies that optimization and fixed-design evaluation use
+the estimator interface and preserve the supplied candidate order.

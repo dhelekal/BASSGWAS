@@ -53,6 +53,9 @@ include("ProbitSampler.jl")
 export ProbitBVSSampler, next_step!, get_state, is_adapted
 include("postpred.jl")
 export postpred, expand_randeff
+include("eig.jl")
+include("raoblackwell_eig.jl")
+export EIGest, CIDEIG, eig, update_eig
 include("eig_opt.jl")
 export optimize_design
 end

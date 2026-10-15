@@ -165,7 +165,8 @@ Zs = (zz ./ sum(zz))
 n_samp = size(data[:, 1], 1)
 idx_rem = (1:n_samp)[1:n_samp .∉ Ref(idx_obs)]
 
-design = optimize_design(idx_rem, U, S, X, iceptf, betasf, usf, Zs, batch_sz; randdes = false, idx_fixed = idx_fixed)
+ec = CIDEIG(idx_rem, U, S, X, iceptf, betasf, usf, Zs)
+design = optimize_design(ec, idx_rem, batch_sz; randdes=false, idx_fixed=idx_fixed)
 selected = data[sort(design[1]), 1]
 
 println("Design objective value: $(design[2])")
