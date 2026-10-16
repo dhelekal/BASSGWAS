@@ -104,11 +104,11 @@ conditionally independent outcomes, implementing `EIGest`.
 - `eig`: Expected information gain of the selected design.
 """
 struct CIDEIG{Tx} <: EIGest
-    p_success::AbstractMatrix{Tx}
-    p_fail::AbstractMatrix{Tx}
-    mlik_arr::AbstractMatrix{Tx}
-    cond_ent::AbstractVector{Tx}
-    Z::AbstractVector{Tx}
+    p_success::Matrix{Tx}
+    p_fail::Matrix{Tx}
+    mlik_arr::Matrix{Tx}
+    cond_ent::Vector{Tx}
+    Z::Vector{Tx}
     mlik1Z::Array{Tx,3}
     comb_ent::Tx
     eig::Tx
