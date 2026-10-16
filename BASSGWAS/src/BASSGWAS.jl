@@ -55,7 +55,8 @@ include("postpred.jl")
 export postpred, expand_randeff
 include("eig.jl")
 include("raoblackwell_eig.jl")
-export EIGest, CIDEIG, eig, update_eig
+include("mlmc_eig.jl")
+export EIGest, CIDEIG, MLMCEig, eig, update_eig
 include("eig_opt.jl")
 export optimize_design
 end
