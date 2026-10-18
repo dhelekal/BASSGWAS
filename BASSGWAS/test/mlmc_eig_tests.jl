@@ -25,14 +25,14 @@ make_mlmc(f; seed=12, weights=f.weights, kwargs...) =
             rng=Xoshiro(seed), kwargs...)
 
 # Explicit tables allow independent checks of arithmetic and row ownership.
-function table_mlmc(p; weights=ones(size(p, 1)), seed=32, omega=0.25,
+function table_mlmc(p; posterior_rows=collect(1:size(p, 1)), seed=32, omega=0.25,
         order=collect(1:size(p, 1)), outcomes=nothing, pilot_samples=16)
     m = size(p, 1)
     if isnothing(outcomes)
         rng = Xoshiro(seed)
         outcomes = [rand(rng) < p[j, i] ? 1 : 0 for j in 1:m, i in axes(p, 2)]
     end
-    MLMCEig(log.(p), log1p.(-p), outcomes, m .* weights ./ sum(weights), Int[],
+    MLMCEig(log.(p), log1p.(-p), outcomes, posterior_rows, Int[],
             order, omega, pilot_samples, 0.0, 0.0, 0.0, Int[], -1)
 end
 
@@ -46,7 +46,7 @@ function direct_level_samples(ec, design, allocations)
         y = ec.outcomes[outer, design]
         prob(row) = prod(exp(y[k] == 1 ? ec.lp_success[row, idx] : ec.lp_fail[row, idx])
                          for (k, idx) in enumerate(design))
-        marginal(indices) = sum(ec.Z[j] * prob(j) for j in indices) / length(indices)
+        marginal(indices) = sum(prob(j) for j in indices) / length(indices)
         value = if i == 1
             log(prob(outer)) - log(marginal(inner))
         else
@@ -54,9 +54,15 @@ function direct_level_samples(ec, design, allocations)
             (log(marginal(inner[1:half])) + log(marginal(inner[half+1:end]))) / 2 -
                 log(marginal(inner))
         end
-        push!(samples[i], ec.Z[outer] * value)
+        push!(samples[i], value)
     end
     samples
+end
+
+# Ordinary Monte Carlo moments, independently calculated from direct likelihoods.
+function direct_level_moments(ec, design, allocations)
+    samples = direct_level_samples(ec, design, allocations)
+    mean.(samples), var.(samples)
 end
 
 @testset "MLMC constructor and immutable interface" begin
@@ -67,14 +73,15 @@ end
         same = make_mlmc(f)
         lp1, lp0 = postpred(f.U, f.S, f.X, f.icept, f.betas, f.us)
         @test ec isa EIGest
-        @test ec.lp_success == lp1[:, f.idx_rem]
-        @test ec.lp_fail == lp0[:, f.idx_rem]
+        @test ec.lp_success == lp1[ec.posterior_rows, f.idx_rem]
+        @test ec.lp_fail == lp0[ec.posterior_rows, f.idx_rem]
         @test ec.outcomes isa Matrix{Int}
         @test all(y -> y == 0 || y == 1, ec.outcomes)
         @test sort(ec.draw_order) == collect(eachindex(f.weights))
-        @test ec.Z ≈ length(f.weights) .* f.weights ./ sum(f.weights)
-        @test sum(ec.Z) ≈ length(f.weights)
-        @test ec.Z !== f.weights
+        @test length(ec.posterior_rows) == length(f.weights)
+        @test all(j -> 1 <= j <= length(f.weights), ec.posterior_rows)
+        @test length(unique(ec.posterior_rows)) < length(f.weights)
+        @test !hasproperty(ec, :Z)
         @test f == snapshot
         @test ec.eig == ec.bias == ec.accuracy == 0
         @test isempty(ec.allocations) && ec.max_level == -1
@@ -99,7 +106,7 @@ end
         @test_throws BoundsError eig(ec, [0])
         @test_throws BoundsError update_eig(ec, 4)
         scaled = make_mlmc(f; weights=8 .* f.weights)
-        @test ec.Z == scaled.Z
+        @test ec.posterior_rows == scaled.posterior_rows
         @test values == eig(scaled, Int32[3, 1, 2])
     end
     f = mlmc_fixture(20)
@@ -115,29 +122,66 @@ end
     end
     @test_throws ArgumentError make_mlmc(f; pilot_samples=1)
     large = make_mlmc(f; weights=1e308 .* f.weights)
-    @test all(isfinite, large.Z) && sum(large.Z) ≈ 20
+    @test length(large.posterior_rows) == 20 && all(j -> 1 <= j <= 20, large.posterior_rows)
 end
 
-@testset "Weighted MLMC arithmetic and numerical stability" begin
+@testset "Weighted posterior resampling at initialization" begin
+    m = 4096
+    f = mlmc_fixture(m)
+    weights = [fill(9.0, m ÷ 2); ones(m ÷ 2)]
+    ec = make_mlmc(f; weights)
+    # The first half has 90% posterior mass. This rejects uniform resampling.
+    count_first = count(<=(m ÷ 2), ec.posterior_rows)
+    @test abs(count_first - 0.9m) < 6sqrt(m * 0.9 * 0.1)
+    @test length(unique(ec.posterior_rows)) < m
+    lp1, lp0 = postpred(f.U, f.S, f.X, f.icept, f.betas, f.us)
+    @test ec.lp_success == lp1[ec.posterior_rows, f.idx_rem]
+    @test ec.lp_fail == lp0[ec.posterior_rows, f.idx_rem]
+
+    # With essentially all mass on one row, source rows repeat but outcomes
+    # must be sampled anew for each copy, rather than copying one outcome row.
+    concentrated = make_mlmc(f; weights=[1.0; fill(1e-300, m - 1)])
+    @test all(==(1), concentrated.posterior_rows)
+    @test all(concentrated.lp_success[:, i] == fill(lp1[1, idx], m)
+              for (i, idx) in enumerate(f.idx_rem))
+    for (i, idx) in enumerate(f.idx_rem)
+        probability = exp(lp1[1, idx])
+        successes = sum(concentrated.outcomes[:, i])
+        @test 0 < successes < m
+        @test abs(successes - m * probability) < 6sqrt(m * probability * (1 - probability))
+    end
+    counts = BASSGWAS.allocate_draws(3, ones(3), concentrated)
+    blocks = BASSGWAS.partition_draws(counts, concentrated)
+    entries = reduce(vcat, values(blocks))
+    @test length(unique(entries)) == length(entries)
+    @test length(unique(concentrated.posterior_rows[entries])) == 1
+    @test update_eig(concentrated, 1).eig ≈ 0 atol=1e-12
+    original = deepcopy(concentrated)
+    @test eig(concentrated, [1, 2]) == eig(concentrated, [1, 2])
+    @test all(getfield(concentrated, field) == getfield(original, field)
+              for field in fieldnames(typeof(concentrated)))
+end
+
+@testset "Unweighted MLMC arithmetic and numerical stability" begin
     p = [0.1 0.2; 0.3 0.4; 0.7 0.6; 0.9 0.8]
-    ec = table_mlmc(p; weights=[1.0, 2.0, 3.0, 4.0])
-    @test BASSGWAS.mlmc_inner([1, 0], [1, 2], [2], 0, ec) ≈ -log(0.8 * 0.3 * 0.6)
-    a = sum(ec.Z[1:2] .* p[1:2, 1] .* (1 .- p[1:2, 2])) / 2
-    b = sum(ec.Z[3:4] .* p[3:4, 1] .* (1 .- p[3:4, 2])) / 2
+    ec = table_mlmc(p)
+    @test BASSGWAS.mlmc_inner([1, 0], [1, 2], [2], 0, ec) ≈ -log(0.3 * 0.6)
+    a = sum(p[1:2, 1] .* (1 .- p[1:2, 2])) / 2
+    b = sum(p[3:4, 1] .* (1 .- p[3:4, 2])) / 2
     correction = BASSGWAS.mlmc_inner([1, 0], [1, 2], [1, 2, 3, 4], 2, ec)
-    @test correction ≈ (log(a) + log(b)) / 2 - log((a + b) / 2)
+    full = sum(p[:, 1] .* (1 .- p[:, 2])) / 4
+    @test correction ≈ (log(a) + log(b)) / 2 - log(full)
     @test correction <= 0
     @test_throws DimensionMismatch BASSGWAS.mlmc_inner([1], [1], [1, 2], 0, ec)
     @test_throws DimensionMismatch BASSGWAS.mlmc_inner([1], [1, 2], [1], 0, ec)
     @test_throws ArgumentError BASSGWAS.mlmc_inner([1], [1], [1], -1, ec)
 
-    large = table_mlmc(repeat(p, 10, 1); weights=collect(1.0:40.0))
+    large = table_mlmc(repeat(p, 10, 1))
     allocations = [5, 3, 2]
     samples = direct_level_samples(large, [1, 2], allocations)
     means, variances = BASSGWAS.mlmc_moments([1, 2], allocations, large)
     @test means ≈ mean.(samples)
     @test variances ≈ var.(samples)
-    # Outer expectations divide by the number of realizations, not weight mass.
     @test means[1] ≈ sum(samples[1]) / allocations[1]
 
     extreme = table_mlmc(fill(0.5, 4, 2))
@@ -152,10 +196,11 @@ end
 end
 
 @testset "Explicit full-level coupling and fixed-pool telescoping" begin
-    p = [0.1 0.2; 0.3 0.4; 0.7 0.6; 0.9 0.8; 0.45 0.55]
+    source_p = [0.1 0.2; 0.3 0.4; 0.7 0.6; 0.9 0.8; 0.45 0.55]
     outcomes = [1 0; 1 1; 0 0; 0 1; 1 0]
-    for weights in (ones(5), [0.2, 0.5, 1.0, 1.3, 2.0])
-        ec = table_mlmc(p; weights, outcomes)
+    for posterior_rows in ([1, 2, 3, 4, 5], [1, 1, 3, 3, 5])
+        p = source_p[posterior_rows, :]
+        ec = table_mlmc(p; posterior_rows, outcomes)
         expected_full = zeros(BigFloat, 3)
         expected_correction = zeros(BigFloat, 3)
         for level in 0:2, outer in 1:5
@@ -165,7 +210,7 @@ end
             # Evaluate P_l directly, including its outer log likelihood, with
             # high precision and the full inner block (no half-block shortcut).
             full_estimate(rows) = log(likelihoods[outer]) -
-                log(sum(BigFloat(ec.Z[j]) * likelihoods[j] for j in rows) / length(rows))
+                log(sum(likelihoods[j] for j in rows) / length(rows))
             others = setdiff(1:5, [outer])
             ninner = 2^level
             full_sum, correction_sum, count = BigFloat(0), BigFloat(0), 0
@@ -191,8 +236,8 @@ end
                 correction_sum += actual
                 count += 1
             end
-            expected_full[level+1] += ec.Z[outer] * full_sum / (5count)
-            expected_correction[level+1] += ec.Z[outer] * correction_sum / (5count)
+            expected_full[level+1] += full_sum / (5count)
+            expected_correction[level+1] += correction_sum / (5count)
         end
         @test isapprox(expected_correction[1], expected_full[1]; atol=2e-14)
         for level in 1:2
@@ -279,12 +324,11 @@ end
         balanced = nothing
         for level in 2:6
             costs = [2^l + 1 for l in 0:level]
-            2sum(costs) <= length(ec.Z) || break
-            pilots = fill(min(16, length(ec.Z) ÷ sum(costs)), level + 1)
-            pilot_v = var.(direct_level_samples(ec, [1], pilots))
+            2sum(costs) <= size(ec.outcomes, 1) || break
+            pilots = fill(min(16, size(ec.outcomes, 1) ÷ sum(costs)), level + 1)
+            _, pilot_v = direct_level_moments(ec, [1], pilots)
             counts = BASSGWAS.allocate_draws(level + 1, pilot_v, ec)
-            samples = direct_level_samples(ec, [1], counts)
-            mu, v = mean.(samples), var.(samples)
+            mu, v = direct_level_moments(ec, [1], counts)
             bias = BASSGWAS.mlmc_bias(mu, v)
             variance = sum(v ./ counts)
             push!(candidates, (; level, counts, value=sum(mu), bias, accuracy=sqrt(variance + bias^2)))

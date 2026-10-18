@@ -18,18 +18,22 @@
 
 Fixed-pool antithetic multilevel Monte Carlo estimator of expected information
 gain. Candidate positions refer to the ordering of `idx_rem`, as in `CIDEIG`.
-The constructor computes predictive log probabilities, samples integer outcomes,
-and fixes a random row order. Subsequent scoring is deterministic and immutable.
+The constructor computes predictive log probabilities and resamples the posterior
+rows with replacement, with probabilities proportional to their importance
+weights. The resampled pool has the same size as the input pool; `posterior_rows`
+records its source indices. It then samples independent integer outcomes for
+every pool entry (including repeated source rows) and fixes a random row order.
+Subsequent scoring is deterministic and uses only unweighted Monte Carlo means.
 
-Weights must be finite and strictly positive and are normalized globally to sum
-to the number of posterior draws. Neither inner nor outer blocks renormalize
-them. At least four rows are required. `omega` is the desired fraction of mean
+Weights must be finite and strictly positive and are used only for resampling.
+At least four rows are required. `omega` is the desired fraction of mean
 squared error due to bias; `pilot_samples` (at least two) caps pilots per level.
 
 `eig`, `bias`, and `accuracy` describe the selected design; `accuracy` is the
 empirical RMSE, including estimated truncation bias. `allocations[l+1]` counts
 realizations at level `l`, through `max_level`. Pilot passes may repartition the
-pool, but every final realization has its own outer row and disjoint inner rows.
+pool, but every final realization has its own outer entry and disjoint inner
+entries. Distinct entries may originate from the same source posterior row.
 These diagnostics follow Algorithm 1 of Goda et al. (arXiv:1811.07546v5); they
 are heuristic for a finite, potentially correlated posterior pool.
 """
@@ -37,7 +41,7 @@ struct MLMCEig{T<:AbstractFloat} <: EIGest
     lp_success::Matrix{T}
     lp_fail::Matrix{T}
     outcomes::Matrix{Int}
-    Z::Vector{T}
+    posterior_rows::Vector{Int}
     selected::Vector{Int}
     draw_order::Vector{Int}
     omega::T
@@ -63,17 +67,17 @@ function MLMCEig(idx_rem::AbstractVector{<:Integer}, Ufull::AbstractMatrix{T},
     pilot_samples >= 2 || throw(ArgumentError("pilot_samples must be at least two"))
 
     lp1, lp0 = postpred(Ufull, Sfull, X, icept, betas, us)
-    lp1, lp0 = lp1[:, idx_rem], lp0[:, idx_rem]
     F = eltype(lp1)
+    # Normalize once for resampling, scaling first to avoid overflow in the sum.
+    probabilities = F.(weights) ./ maximum(weights)
+    probabilities ./= sum(probabilities)
+    posterior_rows = sample(rng, 1:m, Weights(probabilities), m; replace=true)
+    lp1, lp0 = lp1[posterior_rows, idx_rem], lp0[posterior_rows, idx_rem]
     outcomes = Matrix{Int}(undef, size(lp1))
     for i in eachindex(outcomes)
         outcomes[i] = rand(rng, F) < exp(lp1[i]) ? 1 : 0
     end
-    # Scale before summing to avoid overflow; this is one global normalization.
-    Z = F.(weights) ./ maximum(weights)
-    Z .*= F(m) / sum(Z)
-    all(>(zero(F)), Z) || throw(ArgumentError("normalized weights underflowed to zero"))
-    MLMCEig(lp1, lp0, outcomes, Z, Int[], randperm(rng, m), F(omega),
+    MLMCEig(lp1, lp0, outcomes, posterior_rows, Int[], randperm(rng, m), F(omega),
             Int(pilot_samples), zero(F), zero(F), zero(F), Int[], -1)
 end
 
@@ -88,7 +92,7 @@ end
 function mlmc_logmean(outcome, design_idx, rows, ec::MLMCEig{T}) where T
     total = T(-Inf)
     for row in rows
-        total = logaddexp(total, log(ec.Z[row]) + mlmc_loglik(outcome, design_idx, row, ec))
+        total = logaddexp(total, mlmc_loglik(outcome, design_idx, row, ec))
     end
     total - log(T(length(rows)))
 end
@@ -99,7 +103,9 @@ end
 Use exactly `2^level` inner rows. At level zero return the negative log marginal
 estimate (the caller adds the outer log likelihood). At higher levels return the
 antithetic correction: the average half-block log marginal minus the full-block
-log marginal. The outer row and its weight are handled by the caller.
+log marginal. All resampled entries have equal weight, so the full marginal is
+the arithmetic mean of its halves and the correction is nonpositive.
+The caller adds the outer log likelihood only at level zero.
 """
 function mlmc_inner(outcome::AbstractVector, design_idx::AbstractVector,
         draw_idx::AbstractVector, level::Integer, ec::MLMCEig{T}) where T
@@ -110,14 +116,12 @@ function mlmc_inner(outcome::AbstractVector, design_idx::AbstractVector,
     level == 0 && return -mlmc_logmean(outcome, design_idx, draw_idx, ec)
 
     half = length(draw_idx) ÷ 2
-    a = mlmc_logmean(outcome, design_idx, @view(draw_idx[1:half]), ec)
-    b = mlmc_logmean(outcome, design_idx, @view(draw_idx[half+1:end]), ec)
-    # The full-block log mean is log((exp(a)+exp(b))/2): equal half sizes
-    # and globally normalized weights make the full mean their arithmetic mean.
-    # For P_l = outer_loglik - full_logmean, the outer term cancels in
-    # P_l - (P_{l-1}^a + P_{l-1}^b)/2. The full-level contribution is included by
-    # (a+b)/2 - log((exp(a)+exp(b))/2) = -log(cosh((a-b)/2)).
-    # Avoid cancellation for similar halves and overflow for very different ones.
+    rows_a, rows_b = @view(draw_idx[1:half]), @view(draw_idx[half+1:end])
+    a = mlmc_logmean(outcome, design_idx, rows_a, ec)
+    b = mlmc_logmean(outcome, design_idx, rows_b, ec)
+    # Full marginal = (exp(a) + exp(b))/2. The outer log likelihood cancels in
+    # P_l - (P_{l-1}^a + P_{l-1}^b)/2, leaving (a+b)/2 - log(full marginal).
+    # Its equivalent -log(cosh((a-b)/2)) avoids cancellation and overflow.
     d = abs(a / 2 - b / 2)
     d < 1 ? -log1p(2 * sinh(d / 2)^2) : -(d + log1p(exp(-2d)) - log(T(2)))
 end
@@ -142,7 +146,7 @@ function allocate_draws(levels::Integer, variances::AbstractVector, ec::MLMCEig{
     length(variances) == levels || throw(DimensionMismatch("one variance is required per level"))
     all(v -> isfinite(v) && v >= 0, variances) ||
         throw(ArgumentError("variances must be finite and nonnegative"))
-    budget = length(ec.Z)
+    budget = size(ec.outcomes, 1)
     sum(costs) <= budget ÷ 2 || throw(ArgumentError("pool cannot support two realizations per level"))
     v = T.(variances)
     if all(iszero, v)
@@ -213,8 +217,9 @@ end
 """
     partition_draws(allocations, ec)
 
-Map `(level, realization)` to disjoint posterior row vectors in the fixed random
-order. Each block contains its outer row first, followed by `2^level` inner rows.
+Map `(level, realization)` to disjoint resampled-pool entry vectors in the fixed
+random order. Each block has its outer entry first, then `2^level` inner entries.
+The indices address the pool, not the possibly repeated source posterior rows.
 """
 function partition_draws(allocations::AbstractVector, ec::MLMCEig)
     costs = mlmc_costs(length(allocations))
@@ -224,7 +229,7 @@ function partition_draws(allocations::AbstractVector, ec::MLMCEig)
     cursor = 1
     for i in eachindex(allocations), realization in 1:allocations[i]
         cost = costs[i]
-        cost <= length(ec.Z) - cursor + 1 || throw(ArgumentError("allocation exceeds the draw pool"))
+        cost <= size(ec.outcomes, 1) - cursor + 1 || throw(ArgumentError("allocation exceeds the draw pool"))
         blocks[(i - 1, realization)] = ec.draw_order[cursor:cursor+cost-1]
         cursor += cost
     end
@@ -242,8 +247,8 @@ function mlmc_moments(design, allocations, ec::MLMCEig{T}) where T
             outcome = @view ec.outcomes[outer, design]
             value = mlmc_inner(outcome, design, @view(rows[2:end]), i - 1, ec)
             i == 1 && (value += mlmc_loglik(outcome, design, outer, ec))
-            value *= ec.Z[outer]
             isfinite(value) || throw(DomainError(value, "nonfinite MLMC contribution; check predictive likelihoods"))
+            # Welford's update for ordinary means and unbiased sample variances.
             delta = value - means[i]
             means[i] += delta / n
             m2 += delta * (value - means[i])
@@ -271,7 +276,7 @@ function mlmc_bias(means::AbstractVector{T}, variances::AbstractVector) where T
 end
 
 function mlmc_estimate(design, ec::MLMCEig{T}) where T
-    budget = length(ec.Z)
+    budget = size(ec.outcomes, 1)
     max_level, spent, inner = -1, 0, 1
     while inner + 1 <= (budget - spent) ÷ 2
         spent += 2(inner + 1)
@@ -314,7 +319,8 @@ function update_eig(ec::MLMCEig, idx::I) where I<:Integer
     idx in ec.selected && return ec
     selected = sort!([ec.selected; Int(idx)])
     result = mlmc_estimate(selected, ec)
-    MLMCEig(ec.lp_success, ec.lp_fail, ec.outcomes, ec.Z, selected, ec.draw_order,
+    println(result)
+    MLMCEig(ec.lp_success, ec.lp_fail, ec.outcomes, ec.posterior_rows, selected, ec.draw_order,
             ec.omega, ec.pilot_samples, result.eig, result.bias, result.accuracy,
             result.allocations, result.max_level)
 end
