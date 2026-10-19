@@ -14,7 +14,7 @@
 
 """
     MLMCEig(idx_rem, Ufull, Sfull, X, icept, betas, us, weights;
-            rng=Random.default_rng(), omega=0.25, pilot_samples=16)
+            rng=Random.default_rng(), omega=0.25, pilot_samples=48, M0=1)
 
 Fixed-pool antithetic multilevel Monte Carlo estimator of expected information
 gain. Candidate positions refer to the ordering of `idx_rem`, as in `CIDEIG`.
@@ -22,18 +22,29 @@ The constructor computes predictive log probabilities and resamples the posterio
 rows with replacement, with probabilities proportional to their importance
 weights. The resampled pool has the same size as the input pool; `posterior_rows`
 records its source indices. It then samples independent integer outcomes for
-every pool entry (including repeated source rows) and fixes a random row order.
+every pool entry (including repeated source rows). Pool entries retain their
+resampling order.
 Subsequent scoring is deterministic and uses only unweighted Monte Carlo means.
 
 Weights must be finite and strictly positive and are used only for resampling.
-At least four rows are required. `omega` is the desired fraction of mean
-squared error due to bias; `pilot_samples` (at least two) caps pilots per level.
+`M0` must be a positive power of two (including one); level `l` uses `M0 * 2^l` inner
+entries plus one outer entry. The pool must support at least two level-zero
+realizations. `omega` is retained and validated for compatibility,
+but does not affect level selection under RMSE minimization. `pilot_samples`
+(at least two) is the minimum number of complete realizations required to estimate
+a level's allocation moments.
+Each eligible level uses the entire pool of complete blocks in one upfront pass
+per design evaluation. Evaluating a design requires at least `(M0 + 1) * pilot_samples`
+pool entries; otherwise lower `pilot_samples` or supply more posterior draws.
 
 `eig`, `bias`, and `accuracy` describe the selected design; `accuracy` is the
-empirical RMSE, including estimated truncation bias. `allocations[l+1]` counts
-realizations at level `l`, through `max_level`. Pilot passes may repartition the
-pool, but every final realization has its own outer entry and disjoint inner
-entries. Distinct entries may originate from the same source posterior row.
+empirical RMSE, including estimated truncation bias. Level selection minimizes
+predicted RMSE using the frozen upfront moments; reported diagnostics instead use
+the selected final allocation's moments. `allocations[l+1]` counts realizations
+at level `l`, through `max_level`. Upfront moment estimates may
+share pool entries across levels, but not within a level. Every final realization
+has its own outer entry and disjoint inner entries. Distinct entries may originate
+from the same source posterior row.
 These diagnostics follow Algorithm 1 of Goda et al. (arXiv:1811.07546v5); they
 are heuristic for a finite, potentially correlated posterior pool.
 """
@@ -43,9 +54,9 @@ struct MLMCEig{T<:AbstractFloat} <: EIGest
     outcomes::Matrix{Int}
     posterior_rows::Vector{Int}
     selected::Vector{Int}
-    draw_order::Vector{Int}
     omega::T
     pilot_samples::Int
+    M0::Int
     eig::T
     bias::T
     accuracy::T
@@ -57,9 +68,15 @@ function MLMCEig(idx_rem::AbstractVector{<:Integer}, Ufull::AbstractMatrix{T},
         Sfull::AbstractVector{T}, X::AbstractMatrix{T}, icept::AbstractVector{T},
         betas::AbstractMatrix{T}, us::AbstractMatrix{T}, weights::AbstractVector{T};
         rng::AbstractRNG=Random.default_rng(), omega::Real=0.25,
-        pilot_samples::Integer=16) where {T<:AbstractFloat}
+        pilot_samples::Integer=48, M0::Integer=1) where {T<:AbstractFloat}
     m = length(icept)
-    m >= 4 || throw(ArgumentError("MLMC requires at least four posterior draws"))
+    base = M0
+    while base > 1 && iseven(base)
+        base ÷= 2
+    end
+    base == 1 || throw(ArgumentError("M0 must be a positive power of two"))
+    M0 <= m ÷ 2 - 1 || throw(ArgumentError(
+        "MLMC requires at least two level-zero realizations of M0 + 1 posterior draws each"))
     length(weights) == m || throw(DimensionMismatch("one weight is required per draw"))
     all(w -> isfinite(w) && w > 0, weights) ||
         throw(ArgumentError("posterior weights must be finite and strictly positive"))
@@ -77,8 +94,8 @@ function MLMCEig(idx_rem::AbstractVector{<:Integer}, Ufull::AbstractMatrix{T},
     for i in eachindex(outcomes)
         outcomes[i] = rand(rng, F) < exp(lp1[i]) ? 1 : 0
     end
-    MLMCEig(lp1, lp0, outcomes, posterior_rows, Int[], randperm(rng, m), F(omega),
-            Int(pilot_samples), zero(F), zero(F), zero(F), Int[], -1)
+    MLMCEig(lp1, lp0, outcomes, posterior_rows, Int[], F(omega),
+            Int(pilot_samples), Int(M0), zero(F), zero(F), zero(F), Int[], -1)
 end
 
 function mlmc_loglik(outcome, design_idx, row, ec::MLMCEig{T}) where T
@@ -100,7 +117,7 @@ end
 """
     mlmc_inner(outcome, design_idx, draw_idx, level, ec)
 
-Use exactly `2^level` inner rows. At level zero return the negative log marginal
+Use exactly `M0 * 2^level` inner rows. At level zero return the negative log marginal
 estimate (the caller adds the outer log likelihood). At higher levels return the
 antithetic correction: the average half-block log marginal minus the full-block
 log marginal. All resampled entries have equal weight, so the full marginal is
@@ -110,11 +127,14 @@ The caller adds the outer log likelihood only at level zero.
 function mlmc_inner(outcome::AbstractVector, design_idx::AbstractVector,
         draw_idx::AbstractVector, level::Integer, ec::MLMCEig{T}) where T
     level >= 0 || throw(ArgumentError("level must be nonnegative"))
-    length(draw_idx) == Base.checked_pow(2, level) ||
-        throw(DimensionMismatch("level l requires 2^l inner rows"))
+    length(draw_idx) == Base.checked_mul(ec.M0, Base.checked_pow(2, level)) ||
+        throw(DimensionMismatch("level l requires M0 * 2^l inner rows"))
     length(outcome) == length(design_idx) || throw(DimensionMismatch("outcome and design lengths differ"))
-    level == 0 && return -mlmc_logmean(outcome, design_idx, draw_idx, ec)
-
+    
+    if level == 0
+        return -mlmc_logmean(outcome, design_idx, draw_idx, ec)
+    end
+    
     half = length(draw_idx) ÷ 2
     rows_a, rows_b = @view(draw_idx[1:half]), @view(draw_idx[half+1:end])
     a = mlmc_logmean(outcome, design_idx, rows_a, ec)
@@ -127,22 +147,22 @@ function mlmc_inner(outcome::AbstractVector, design_idx::AbstractVector,
 end
 
 # `levels` is a count: entries correspond to levels 0, ..., levels-1.
-function mlmc_costs(levels::Integer)
+function mlmc_costs(levels::Integer, M0::Integer=1)
     levels >= 1 || throw(ArgumentError("at least one level is required"))
-    [Base.checked_add(Base.checked_pow(2, l), 1) for l in 0:levels-1]
+    [Base.checked_add(Base.checked_mul(M0, Base.checked_pow(2, l)), 1) for l in 0:levels-1]
 end
 
 """
     allocate_draws(levels, variances, ec)
 
-Allocate realization counts (not individual rows) with cost `2^l + 1`, at least
+Allocate realization counts (not individual rows) with cost `M0 * 2^l + 1`, at least
 two per level, and continuous targets proportional to `sqrt(V_l / C_l)`.
 Integer rounding spends the maximum feasible row budget. Zero variances receive
 the minimum continuous allocation; if all variances vanish, equal surrogate
 variances determine the allocation. Rounding may add blocks at any level.
 """
 function allocate_draws(levels::Integer, variances::AbstractVector, ec::MLMCEig{T}) where T
-    costs = mlmc_costs(levels)
+    costs = mlmc_costs(levels, ec.M0)
     length(variances) == levels || throw(DimensionMismatch("one variance is required per level"))
     all(v -> isfinite(v) && v >= 0, variances) ||
         throw(ArgumentError("variances must be finite and nonnegative"))
@@ -150,6 +170,7 @@ function allocate_draws(levels::Integer, variances::AbstractVector, ec::MLMCEig{
     sum(costs) <= budget ÷ 2 || throw(ArgumentError("pool cannot support two realizations per level"))
     v = T.(variances)
     if all(iszero, v)
+        @warn "All MLMC variances are numerically equal to 0."
         fill!(v, one(T))
     else
         v ./= maximum(v)
@@ -171,11 +192,39 @@ function allocate_draws(levels::Integer, variances::AbstractVector, ec::MLMCEig{
         remaining -= 2sum(costs[i] for i in fixed)
         active = setdiff(active, fixed)
     end
-    remaining = budget - sum(costs .* counts)
-    while remaining >= 2
+    # Reachable extra costs identify the largest feasible spend for any M0.
+    # Integer flags avoid bit arrays; the minimum two blocks remain reserved.
+    capacity = budget - 2sum(costs)
+    reachable = zeros(Int, capacity + 1)
+    reachable[1] = 1
+    for total in 1:capacity
+        for cost in costs
+            cost > total && break
+            if reachable[total - cost + 1] == 1
+                reachable[total + 1] = 1
+                break
+            end
+        end
+    end
+    target = 2sum(costs) + findlast(==(1), reachable) - 1
+    remaining = target - sum(costs .* counts)
+    # Undo rounded blocks only if necessary to make the remainder spendable.
+    while reachable[remaining + 1] == 0
+        best, penalty = 0, T(Inf)
+        for i in eachindex(counts)
+            counts[i] > 2 || continue
+            change = v[i] / (costs[i] * T(counts[i]) * (counts[i] - 1))
+            if change < penalty
+                best, penalty = i, change
+            end
+        end
+        counts[best] -= 1
+        remaining += costs[best]
+    end
+    while remaining > 0
         best, gain = 0, -one(T)
         for i in eachindex(counts)
-            if costs[i] <= remaining
+            if costs[i] <= remaining && reachable[remaining - costs[i] + 1] == 1
                 improvement = v[i] / (costs[i] * T(counts[i]) * (counts[i] + 1))
                 if improvement > gain
                     best, gain = i, improvement
@@ -185,44 +234,18 @@ function allocate_draws(levels::Integer, variances::AbstractVector, ec::MLMCEig{
         counts[best] += 1
         remaining -= costs[best]
     end
-    # All costs except level zero are odd. If one row remains, exchange an
-    # extra block to fill it, choosing the exchange with least variance cost.
-    if remaining == 1 && levels > 1
-        best, penalty = 0, T(Inf)
-        for i in eachindex(counts)
-            counts[i] > 2 || continue
-            if i == 1
-                change = v[1] / (T(counts[1]) * (counts[1] - 1)) -
-                         v[2] / (T(counts[2]) * (counts[2] + 1))
-            else
-                extra = (costs[i] + 1) ÷ 2
-                change = v[i] / (T(counts[i]) * (counts[i] - 1)) -
-                         v[1] * extra / (T(counts[1]) * (counts[1] + extra))
-            end
-            if change < penalty
-                best, penalty = i, change
-            end
-        end
-        if best == 1
-            counts[1] -= 1
-            counts[2] += 1
-        elseif best > 1
-            counts[best] -= 1
-            counts[1] += (costs[best] + 1) ÷ 2
-        end
-    end
     counts
 end
 
 """
     partition_draws(allocations, ec)
 
-Map `(level, realization)` to disjoint resampled-pool entry vectors in the fixed
-random order. Each block has its outer entry first, then `2^level` inner entries.
+Map `(level, realization)` to disjoint resampled-pool entry vectors in pool
+order. Each block has its outer entry first, then `M0 * 2^level` inner entries.
 The indices address the pool, not the possibly repeated source posterior rows.
 """
 function partition_draws(allocations::AbstractVector, ec::MLMCEig)
-    costs = mlmc_costs(length(allocations))
+    costs = mlmc_costs(length(allocations), ec.M0)
     all(n -> n isa Integer && n >= 0, allocations) ||
         throw(ArgumentError("allocations must be nonnegative integers"))
     blocks = Dict{Tuple{Int,Int},Vector{Int}}()
@@ -230,30 +253,64 @@ function partition_draws(allocations::AbstractVector, ec::MLMCEig)
     for i in eachindex(allocations), realization in 1:allocations[i]
         cost = costs[i]
         cost <= size(ec.outcomes, 1) - cursor + 1 || throw(ArgumentError("allocation exceeds the draw pool"))
-        blocks[(i - 1, realization)] = ec.draw_order[cursor:cursor+cost-1]
+        blocks[(i - 1, realization)] = collect(cursor:cursor+cost-1)
         cursor += cost
     end
     blocks
+end
+
+function mlmc_level_moments(design, level, blocks, ec::MLMCEig{T}) where T
+    mean, m2, count = zero(T), zero(T), 0
+    for rows in blocks
+        outer = first(rows)
+        outcome = @view ec.outcomes[outer, design]
+        value = mlmc_inner(outcome, design, @view(rows[2:end]), level, ec)
+        level == 0 && (value += mlmc_loglik(outcome, design, outer, ec))
+        isfinite(value) || throw(DomainError(value, "nonfinite MLMC contribution; check predictive likelihoods"))
+        # Welford's update for ordinary means and unbiased sample variances.
+        count += 1
+        delta = value - mean
+        mean += delta / count
+        m2 += delta * (value - mean)
+    end
+    count >= 2 || throw(ArgumentError("level moments require at least two realizations"))
+    mean, max(zero(T), m2 / (count - 1))
 end
 
 function mlmc_moments(design, allocations, ec::MLMCEig{T}) where T
     blocks = partition_draws(allocations, ec)
     means, variances = zeros(T, length(allocations)), zeros(T, length(allocations))
     for i in eachindex(allocations)
-        m2 = zero(T)
-        for n in 1:allocations[i]
-            rows = blocks[(i - 1, n)]
-            outer = first(rows)
-            outcome = @view ec.outcomes[outer, design]
-            value = mlmc_inner(outcome, design, @view(rows[2:end]), i - 1, ec)
-            i == 1 && (value += mlmc_loglik(outcome, design, outer, ec))
-            isfinite(value) || throw(DomainError(value, "nonfinite MLMC contribution; check predictive likelihoods"))
-            # Welford's update for ordinary means and unbiased sample variances.
-            delta = value - means[i]
-            means[i] += delta / n
-            m2 += delta * (value - means[i])
-        end
-        variances[i] = max(zero(T), m2 / (allocations[i] - 1))
+        level_blocks = (blocks[(i - 1, n)] for n in 1:allocations[i])
+        means[i], variances[i] = mlmc_level_moments(design, i - 1, level_blocks, ec)
+    end
+    means, variances
+end
+
+"""
+    mlmc_allocation_moments(design, ec)
+
+Compute allocation means and variances once using every complete block at each eligible
+level. Level `l` uses `floor(M / (M0 * 2^l + 1))` realizations and must have at least
+`pilot_samples`. Each level restarts at the beginning of the resampled pool;
+entries may be shared between levels, but never within one level's estimate.
+"""
+function mlmc_allocation_moments(design, ec::MLMCEig{T}) where T
+    budget = size(ec.outcomes, 1)
+    budget ÷ (ec.M0 + 1) >= ec.pilot_samples || throw(ArgumentError(
+        "pool cannot provide pilot_samples=$(ec.pilot_samples) level-zero realizations; " *
+        "lower pilot_samples or supply more posterior draws"))
+    means, variances = T[], T[]
+    level, inner = 0, ec.M0
+    while inner + 1 <= budget ÷ ec.pilot_samples
+        cost = inner + 1
+        count = budget ÷ cost
+        blocks = Iterators.partition(1:count*cost, cost)
+        mean, variance = mlmc_level_moments(design, level, blocks, ec)
+        push!(means, mean)
+        push!(variances, variance)
+        level += 1
+        inner *= 2
     end
     means, variances
 end
@@ -277,29 +334,31 @@ end
 
 function mlmc_estimate(design, ec::MLMCEig{T}) where T
     budget = size(ec.outcomes, 1)
-    max_level, spent, inner = -1, 0, 1
+    allocation_means, allocation_variances = mlmc_allocation_moments(design, ec)
+    max_level, spent, inner = -1, 0, ec.M0
     while inner + 1 <= (budget - spent) ÷ 2
         spent += 2(inner + 1)
         max_level += 1
         inner *= 2
     end
+    max_level = min(max_level, length(allocation_variances) - 1)
     best = nothing
-    for level in min(2, max_level):max_level
-        costs = mlmc_costs(level + 1)
-        pilots = fill(min(ec.pilot_samples, budget ÷ sum(costs)), level + 1)
-        _, pilot_variances = mlmc_moments(design, pilots, ec)
-        allocations = allocate_draws(level + 1, pilot_variances, ec)
-        means, variances = mlmc_moments(design, allocations, ec)
-        bias = mlmc_bias(means, variances)
+    for level in 0:max_level
+        means = @view allocation_means[1:level+1]
+        variances = @view allocation_variances[1:level+1]
+        allocations = allocate_draws(level + 1, variances, ec)
+        bias = 4*mlmc_bias(means, variances)
         sampling_variance = sum(variances ./ allocations)
-        result = (; eig=sum(means), bias, accuracy=hypot(sqrt(sampling_variance), bias),
-                   allocations, max_level=level)
-        if isnothing(best) || result.accuracy < best.accuracy
-            best = result
+        predicted_rmse = hypot(sqrt(sampling_variance), bias)
+        if isnothing(best) || predicted_rmse < best.predicted_rmse
+            best = (; predicted_rmse, allocations, max_level=level)
         end
-        bias <= sqrt(ec.omega / (1 - ec.omega)) * sqrt(sampling_variance) && return result
     end
-    best
+    means, variances = mlmc_moments(design, best.allocations, ec)
+    bias = mlmc_bias(means, variances)
+    sampling_variance = sum(variances ./ best.allocations)
+    (; eig=sum(means), bias, accuracy=hypot(sqrt(sampling_variance), bias),
+       allocations=best.allocations, max_level=best.max_level, variances=variances)
 end
 
 """Return total MLMC EIG for each candidate addition, without changing `ec`."""
@@ -320,7 +379,7 @@ function update_eig(ec::MLMCEig, idx::I) where I<:Integer
     selected = sort!([ec.selected; Int(idx)])
     result = mlmc_estimate(selected, ec)
     println(result)
-    MLMCEig(ec.lp_success, ec.lp_fail, ec.outcomes, ec.posterior_rows, selected, ec.draw_order,
-            ec.omega, ec.pilot_samples, result.eig, result.bias, result.accuracy,
+    MLMCEig(ec.lp_success, ec.lp_fail, ec.outcomes, ec.posterior_rows, selected,
+            ec.omega, ec.pilot_samples, ec.M0, result.eig, result.bias, result.accuracy,
             result.allocations, result.max_level)
 end
