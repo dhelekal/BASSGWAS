@@ -98,25 +98,32 @@ function MLMCEig(idx_rem::AbstractVector{<:Integer}, Ufull::AbstractMatrix{T},
             Int(pilot_samples), Int(M0), zero(F), zero(F), zero(F), Int[], -1)
 end
 
-function mlmc_loglik(outcome, design_idx, row, ec::MLMCEig{T}) where T
+"""Evaluate the outcome stored at pool entry `outer` under likelihood row `row`."""
+function mlmc_loglik(outer::Integer, design_idx, row, ec::MLMCEig{T}) where T
+    checkbounds(ec.outcomes, outer, :)
     value = zero(T)
-    for (y, idx) in zip(outcome, design_idx)
+    for idx in design_idx
+        y = ec.outcomes[outer, idx]
         value += y == 1 ? ec.lp_success[row, idx] : ec.lp_fail[row, idx]
     end
     value
 end
 
-function mlmc_logmean(outcome, design_idx, rows, ec::MLMCEig{T}) where T
+"""Log mean likelihood over `rows` for the outcome stored at pool entry `outer`."""
+function mlmc_logmean(outer::Integer, design_idx, rows, ec::MLMCEig{T}) where T
+    checkbounds(ec.outcomes, outer, :)
     total = T(-Inf)
     for row in rows
-        total = logaddexp(total, mlmc_loglik(outcome, design_idx, row, ec))
+        total = logaddexp(total, mlmc_loglik(outer, design_idx, row, ec))
     end
     total - log(T(length(rows)))
 end
 
 """
-    mlmc_inner(outcome, design_idx, draw_idx, level, ec)
+    mlmc_inner(outer, design_idx, draw_idx, level, ec)
 
+Use the outcome stored at resampled-pool entry `outer`, not its source posterior
+row, for every likelihood in the full block and both antithetic halves.
 Use exactly `M0 * 2^level` inner rows. At level zero return the negative log marginal
 estimate (the caller adds the outer log likelihood). At higher levels return the
 antithetic correction: the average half-block log marginal minus the full-block
@@ -124,21 +131,21 @@ log marginal. All resampled entries have equal weight, so the full marginal is
 the arithmetic mean of its halves and the correction is nonpositive.
 The caller adds the outer log likelihood only at level zero.
 """
-function mlmc_inner(outcome::AbstractVector, design_idx::AbstractVector,
+function mlmc_inner(outer::Integer, design_idx::AbstractVector,
         draw_idx::AbstractVector, level::Integer, ec::MLMCEig{T}) where T
     level >= 0 || throw(ArgumentError("level must be nonnegative"))
     length(draw_idx) == Base.checked_mul(ec.M0, Base.checked_pow(2, level)) ||
         throw(DimensionMismatch("level l requires M0 * 2^l inner rows"))
-    length(outcome) == length(design_idx) || throw(DimensionMismatch("outcome and design lengths differ"))
-    
+    checkbounds(ec.outcomes, outer, :)
+
     if level == 0
-        return -mlmc_logmean(outcome, design_idx, draw_idx, ec)
+        return -mlmc_logmean(outer, design_idx, draw_idx, ec)
     end
-    
+
     half = length(draw_idx) ÷ 2
     rows_a, rows_b = @view(draw_idx[1:half]), @view(draw_idx[half+1:end])
-    a = mlmc_logmean(outcome, design_idx, rows_a, ec)
-    b = mlmc_logmean(outcome, design_idx, rows_b, ec)
+    a = mlmc_logmean(outer, design_idx, rows_a, ec)
+    b = mlmc_logmean(outer, design_idx, rows_b, ec)
     # Full marginal = (exp(a) + exp(b))/2. The outer log likelihood cancels in
     # P_l - (P_{l-1}^a + P_{l-1}^b)/2, leaving (a+b)/2 - log(full marginal).
     # Its equivalent -log(cosh((a-b)/2)) avoids cancellation and overflow.
@@ -263,9 +270,8 @@ function mlmc_level_moments(design, level, blocks, ec::MLMCEig{T}) where T
     mean, m2, count = zero(T), zero(T), 0
     for rows in blocks
         outer = first(rows)
-        outcome = @view ec.outcomes[outer, design]
-        value = mlmc_inner(outcome, design, @view(rows[2:end]), level, ec)
-        level == 0 && (value += mlmc_loglik(outcome, design, outer, ec))
+        value = mlmc_inner(outer, design, @view(rows[2:end]), level, ec)
+        level == 0 && (value += mlmc_loglik(outer, design, outer, ec))
         isfinite(value) || throw(DomainError(value, "nonfinite MLMC contribution; check predictive likelihoods"))
         # Welford's update for ordinary means and unbiased sample variances.
         count += 1

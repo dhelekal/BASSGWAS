@@ -151,11 +151,11 @@ end
 
         # Check the full marginal and equal halves directly for each base size.
         p = reshape(collect(range(0.1, 0.9; length=8M0)), :, 1)
-        table = table_mlmc(p; M0)
+        table = table_mlmc(p; M0, outcomes=ones(Int, size(p)))
         for level in 0:3
             n = M0 * 2^level
             rows = collect(1:n)
-            actual = BASSGWAS.mlmc_inner([1], [1], rows, level, table)
+            actual = BASSGWAS.mlmc_inner(1, [1], rows, level, table)
             expected = if level == 0
                 -log(mean(p[rows, 1]))
             else
@@ -165,7 +165,7 @@ end
             end
             @test actual ≈ expected
             level > 0 && @test actual <= 0
-            @test_throws DimensionMismatch BASSGWAS.mlmc_inner([1], [1], rows[1:end-1], level, table)
+            @test_throws DimensionMismatch BASSGWAS.mlmc_inner(1, [1], rows[1:end-1], level, table)
         end
     end
 end
@@ -209,17 +209,16 @@ end
 
 @testset "Unweighted MLMC arithmetic and numerical stability" begin
     p = [0.1 0.2; 0.3 0.4; 0.7 0.6; 0.9 0.8]
-    ec = table_mlmc(p)
-    @test BASSGWAS.mlmc_inner([1, 0], [1, 2], [2], 0, ec) ≈ -log(0.3 * 0.6)
+    ec = table_mlmc(p; outcomes=[1 0; 0 1; 1 1; 0 0])
+    @test BASSGWAS.mlmc_inner(1, [1, 2], [2], 0, ec) ≈ -log(0.3 * 0.6)
     a = sum(p[1:2, 1] .* (1 .- p[1:2, 2])) / 2
     b = sum(p[3:4, 1] .* (1 .- p[3:4, 2])) / 2
-    correction = BASSGWAS.mlmc_inner([1, 0], [1, 2], [1, 2, 3, 4], 2, ec)
+    correction = BASSGWAS.mlmc_inner(1, [1, 2], [1, 2, 3, 4], 2, ec)
     full = sum(p[:, 1] .* (1 .- p[:, 2])) / 4
     @test correction ≈ (log(a) + log(b)) / 2 - log(full)
     @test correction <= 0
-    @test_throws DimensionMismatch BASSGWAS.mlmc_inner([1], [1], [1, 2], 0, ec)
-    @test_throws DimensionMismatch BASSGWAS.mlmc_inner([1], [1, 2], [1], 0, ec)
-    @test_throws ArgumentError BASSGWAS.mlmc_inner([1], [1], [1], -1, ec)
+    @test_throws DimensionMismatch BASSGWAS.mlmc_inner(1, [1], [1, 2], 0, ec)
+    @test_throws ArgumentError BASSGWAS.mlmc_inner(1, [1], [1], -1, ec)
 
     large = table_mlmc(repeat(p, 10, 1))
     allocations = [5, 3, 2]
@@ -229,15 +228,47 @@ end
     @test variances ≈ var.(samples)
     @test means[1] ≈ sum(samples[1]) / allocations[1]
 
-    extreme = table_mlmc(fill(0.5, 4, 2))
+    extreme = table_mlmc(fill(0.5, 4, 2); outcomes=ones(Int, 4, 2))
     extreme.lp_success .= [-1000.0 -1000; -1001 -1001; -2000 -2000; -2001 -2001]
-    @test BASSGWAS.mlmc_inner([1, 1], [1, 2], [1], 0, extreme) == 2000
-    @test BASSGWAS.mlmc_inner([1, 1], [1, 2], [1, 2, 3, 4], 2, extreme) ≈ -1000 + log(2)
+    @test BASSGWAS.mlmc_inner(1, [1, 2], [1], 0, extreme) == 2000
+    @test BASSGWAS.mlmc_inner(1, [1, 2], [1, 2, 3, 4], 2, extreme) ≈ -1000 + log(2)
     extreme.lp_success .= -1000
-    @test BASSGWAS.mlmc_inner([1, 1], [1, 2], [1, 2, 3, 4], 2, extreme) == 0
+    @test BASSGWAS.mlmc_inner(1, [1, 2], [1, 2, 3, 4], 2, extreme) == 0
     extreme.lp_success[3:4, :] .-= 1e-6
-    tiny = BASSGWAS.mlmc_inner([1, 1], [1, 2], [1, 2, 3, 4], 2, extreme)
+    tiny = BASSGWAS.mlmc_inner(1, [1, 2], [1, 2, 3, 4], 2, extreme)
     @test tiny < 0 && isapprox(tiny, -5e-13; rtol=1e-6)
+end
+
+@testset "MLMC outer pool-row outcome lookup" begin
+    p = [0.1 0.3 0.8; 0.1 0.3 0.8; 0.7 0.4 0.2; 0.9 0.6 0.5]
+    outcomes = [1 0 1; 0 1 0; 1 1 0; 0 0 1]
+    ec = table_mlmc(p; outcomes, posterior_rows=[1, 1, 3, 4])
+    for outer in 1:4, design in (Int[], [3], [3, 1], [2, 3, 1])
+        # Independent reference keeps the explicit outcome-vector calculation.
+        outcome = outcomes[outer, design]
+        logliks = [sum((log(outcome[k] == 1 ? p[row, idx] : 1 - p[row, idx])
+                       for (k, idx) in enumerate(design)); init=0.0) for row in 1:4]
+        for row in 1:4
+            @test BASSGWAS.mlmc_loglik(Int32(outer), design, row, ec) ≈ logliks[row]
+        end
+        others = setdiff(1:4, [outer])
+        @test BASSGWAS.mlmc_logmean(outer, design, others, ec) ≈ log(mean(exp.(logliks[others]))) atol=1e-15
+        for level in 0:1
+            rows = others[1:2^level]
+            full = log(mean(exp.(logliks[rows])))
+            expected = level == 0 ? -full : mean(logliks[rows]) - full
+            @test BASSGWAS.mlmc_inner(outer, design, rows, level, ec) ≈ expected atol=1e-15
+        end
+    end
+    # Two copies of the same source posterior row retain different outcomes.
+    @test BASSGWAS.mlmc_loglik(1, [1], 3, ec) != BASSGWAS.mlmc_loglik(2, [1], 3, ec)
+    for outer in (0, 5), design in (Int[], [1])
+        @test_throws BoundsError BASSGWAS.mlmc_loglik(outer, design, 1, ec)
+        @test_throws BoundsError BASSGWAS.mlmc_logmean(outer, design, [1, 2], ec)
+        @test_throws BoundsError BASSGWAS.mlmc_logmean(outer, design, Int[], ec)
+        @test_throws BoundsError BASSGWAS.mlmc_inner(outer, design, [1], 0, ec)
+        @test_throws BoundsError BASSGWAS.mlmc_inner(outer, design, [1, 2], 1, ec)
+    end
 end
 
 @testset "Explicit full-level coupling and fixed-pool telescoping" begin
@@ -264,7 +295,7 @@ end
             for rows in Iterators.product(ntuple(_ -> others, ninner)...)
                 length(unique(rows)) == ninner || continue
                 full = full_estimate(rows)
-                actual = BASSGWAS.mlmc_inner(outcome, [1, 2], collect(rows), level, ec)
+                actual = BASSGWAS.mlmc_inner(outer, [1, 2], collect(rows), level, ec)
                 if level == 0
                     actual += sum(outcome[k] == 1 ? ec.lp_success[outer, k] :
                                   ec.lp_fail[outer, k] for k in 1:2)
