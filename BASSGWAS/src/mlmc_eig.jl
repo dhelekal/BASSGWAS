@@ -18,12 +18,11 @@
 
 Fixed-pool antithetic multilevel Monte Carlo estimator of expected information
 gain. Candidate positions refer to the ordering of `idx_rem`, as in `CIDEIG`.
-The constructor computes predictive log probabilities and resamples the posterior
-rows with replacement, with probabilities proportional to their importance
-weights. The resampled pool has the same size as the input pool; `posterior_rows`
-records its source indices. It then samples independent integer outcomes for
-every pool entry (including repeated source rows). Pool entries retain their
-resampling order.
+The constructor computes predictive log probabilities and uses stratified
+resampling of posterior rows according to their importance weights, allowing
+repeated source rows. The pool has the same size as the input pool; `posterior_rows`
+records its source indices. It shuffles these indices once before sampling
+independent integer outcomes for every pool entry (including repeated source rows).
 Subsequent scoring is deterministic and uses only unweighted Monte Carlo means.
 
 Weights must be finite and strictly positive and are used only for resampling.
@@ -46,7 +45,8 @@ share pool entries across levels, but not within a level. Every final realizatio
 has its own outer entry and disjoint inner entries. Distinct entries may originate
 from the same source posterior row.
 These diagnostics follow Algorithm 1 of Goda et al. (arXiv:1811.07546v5); they
-are heuristic for a finite, potentially correlated posterior pool.
+are heuristic for a finite, potentially correlated posterior pool. Stratified
+resampling also introduces dependence between pool entries.
 """
 struct MLMCEig{T<:AbstractFloat} <: EIGest
     lp_success::Matrix{T}
@@ -62,6 +62,33 @@ struct MLMCEig{T<:AbstractFloat} <: EIGest
     accuracy::T
     allocations::Vector{Int}
     max_level::Int
+end
+
+"""
+    mlmc_stratified_rows(rng, weights)
+
+Resample one source index per equal-probability stratum, then shuffle the indices
+so consecutive MLMC blocks do not inherit source-row ordering. The constructor
+validates that weights are finite, positive, and nonempty.
+"""
+function mlmc_stratified_rows(rng::AbstractRNG, weights::AbstractVector{T}) where {T<:AbstractFloat}
+    F = promote_type(Float64, T)
+    # Scale before accumulating, then normalize the cumulative weights once.
+    cdf = cumsum(F.(weights) ./ F(maximum(weights)))
+    cdf ./= last(cdf)
+    cdf[end] = one(F)
+    m = length(weights)
+    rows = Vector{Int}(undef, m)
+    row = 1
+    for i in 1:m
+        # Rounding must not move a draw onto its stratum's upper endpoint.
+        u = min((F(i - 1) + rand(rng, F)) / m, prevfloat(F(i) / m))
+        while u >= cdf[row]
+            row += 1
+        end
+        rows[i] = row
+    end
+    shuffle!(rng, rows)
 end
 
 function MLMCEig(idx_rem::AbstractVector{<:Integer}, Ufull::AbstractMatrix{T},
@@ -85,10 +112,7 @@ function MLMCEig(idx_rem::AbstractVector{<:Integer}, Ufull::AbstractMatrix{T},
 
     lp1, lp0 = postpred(Ufull, Sfull, X, icept, betas, us)
     F = eltype(lp1)
-    # Normalize once for resampling, scaling first to avoid overflow in the sum.
-    probabilities = F.(weights) ./ maximum(weights)
-    probabilities ./= sum(probabilities)
-    posterior_rows = sample(rng, 1:m, Weights(probabilities), m; replace=true)
+    posterior_rows = mlmc_stratified_rows(rng, weights)
     lp1, lp0 = lp1[posterior_rows, idx_rem], lp0[posterior_rows, idx_rem]
     outcomes = Matrix{Int}(undef, size(lp1))
     for i in eachindex(outcomes)
@@ -119,17 +143,43 @@ function mlmc_logmean(outer::Integer, design_idx, rows, ec::MLMCEig{T}) where T
     total - log(T(length(rows)))
 end
 
+function mlmc_inner_L0(outer::Integer, design_idx::AbstractVector,
+        draw_idx::AbstractVector, ec::MLMCEig{T}) where T
+
+    value = zero(T)
+
+    for des_idx in design_idx
+        lp1_outer = ec.lp_success[outer, des_idx]
+        lp0_outer = ec.lp_fail[outer, des_idx]
+        
+        total1 = T(-Inf)
+        total0 = T(-Inf)
+
+        length(draw_idx) != 1 && error("Cant use more than 1 draw")
+        for draw in draw_idx
+            total1 = ec.lp_success[draw, des_idx]
+            total0 = ec.lp_fail[draw, des_idx]
+        end
+
+        total1 -= log(T(length(draw_idx)))
+        total0 -= log(T(length(draw_idx)))
+
+        value += xexpy(lp1_outer - total1,lp1_outer)
+        value += xexpy(lp0_outer - total0,lp0_outer)
+    end
+    value
+end
+
 """
     mlmc_inner(outer, design_idx, draw_idx, level, ec)
 
 Use the outcome stored at resampled-pool entry `outer`, not its source posterior
 row, for every likelihood in the full block and both antithetic halves.
-Use exactly `M0 * 2^level` inner rows. At level zero return the negative log marginal
-estimate (the caller adds the outer log likelihood). At higher levels return the
+Use exactly `M0 * 2^level` inner rows. At level zero return the outer log likelihood
+minus the log marginal estimate. At higher levels return the
 antithetic correction: the average half-block log marginal minus the full-block
 log marginal. All resampled entries have equal weight, so the full marginal is
 the arithmetic mean of its halves and the correction is nonpositive.
-The caller adds the outer log likelihood only at level zero.
 """
 function mlmc_inner(outer::Integer, design_idx::AbstractVector,
         draw_idx::AbstractVector, level::Integer, ec::MLMCEig{T}) where T
@@ -139,7 +189,9 @@ function mlmc_inner(outer::Integer, design_idx::AbstractVector,
     checkbounds(ec.outcomes, outer, :)
 
     if level == 0
-        return -mlmc_logmean(outer, design_idx, draw_idx, ec)
+        return mlmc_loglik(outer, design_idx, outer, ec) -
+               mlmc_logmean(outer, design_idx, draw_idx, ec)
+        #return mlmc_inner_L0(outer, design_idx, draw_idx, ec)
     end
 
     half = length(draw_idx) ÷ 2
@@ -271,7 +323,6 @@ function mlmc_level_moments(design, level, blocks, ec::MLMCEig{T}) where T
     for rows in blocks
         outer = first(rows)
         value = mlmc_inner(outer, design, @view(rows[2:end]), level, ec)
-        level == 0 && (value += mlmc_loglik(outer, design, outer, ec))
         isfinite(value) || throw(DomainError(value, "nonfinite MLMC contribution; check predictive likelihoods"))
         # Welford's update for ordinary means and unbiased sample variances.
         count += 1

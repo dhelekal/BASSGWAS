@@ -7,6 +7,8 @@ using Distributions
 using Random
 using Statistics
 
+include("mlmc_resampling_tests.jl")
+
 function mlmc_fixture(m=256; T=Float64)
     rng = Xoshiro(91)
     idx_rem = [3, 1, 4]
@@ -157,7 +159,7 @@ end
             rows = collect(1:n)
             actual = BASSGWAS.mlmc_inner(1, [1], rows, level, table)
             expected = if level == 0
-                -log(mean(p[rows, 1]))
+                log(p[1, 1]) - log(mean(p[rows, 1]))
             else
                 half = n ÷ 2
                 (log(mean(p[1:half, 1])) + log(mean(p[half+1:n, 1]))) / 2 -
@@ -210,7 +212,7 @@ end
 @testset "Unweighted MLMC arithmetic and numerical stability" begin
     p = [0.1 0.2; 0.3 0.4; 0.7 0.6; 0.9 0.8]
     ec = table_mlmc(p; outcomes=[1 0; 0 1; 1 1; 0 0])
-    @test BASSGWAS.mlmc_inner(1, [1, 2], [2], 0, ec) ≈ -log(0.3 * 0.6)
+    @test BASSGWAS.mlmc_inner(1, [1, 2], [2], 0, ec) ≈ log(0.1 * 0.8) - log(0.3 * 0.6)
     a = sum(p[1:2, 1] .* (1 .- p[1:2, 2])) / 2
     b = sum(p[3:4, 1] .* (1 .- p[3:4, 2])) / 2
     correction = BASSGWAS.mlmc_inner(1, [1, 2], [1, 2, 3, 4], 2, ec)
@@ -230,7 +232,8 @@ end
 
     extreme = table_mlmc(fill(0.5, 4, 2); outcomes=ones(Int, 4, 2))
     extreme.lp_success .= [-1000.0 -1000; -1001 -1001; -2000 -2000; -2001 -2001]
-    @test BASSGWAS.mlmc_inner(1, [1, 2], [1], 0, extreme) == 2000
+    @test BASSGWAS.mlmc_inner(1, [1, 2], [1], 0, extreme) == 0
+    @test BASSGWAS.mlmc_inner(1, [1, 2], [3], 0, extreme) == 2000
     @test BASSGWAS.mlmc_inner(1, [1, 2], [1, 2, 3, 4], 2, extreme) ≈ -1000 + log(2)
     extreme.lp_success .= -1000
     @test BASSGWAS.mlmc_inner(1, [1, 2], [1, 2, 3, 4], 2, extreme) == 0
@@ -256,7 +259,7 @@ end
         for level in 0:1
             rows = others[1:2^level]
             full = log(mean(exp.(logliks[rows])))
-            expected = level == 0 ? -full : mean(logliks[rows]) - full
+            expected = level == 0 ? logliks[outer] - full : mean(logliks[rows]) - full
             @test BASSGWAS.mlmc_inner(outer, design, rows, level, ec) ≈ expected atol=1e-15
         end
     end
@@ -297,8 +300,6 @@ end
                 full = full_estimate(rows)
                 actual = BASSGWAS.mlmc_inner(outer, [1, 2], collect(rows), level, ec)
                 if level == 0
-                    actual += sum(outcome[k] == 1 ? ec.lp_success[outer, k] :
-                                  ec.lp_fail[outer, k] for k in 1:2)
                     reference = full
                 else
                     half = ninner ÷ 2
