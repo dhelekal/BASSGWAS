@@ -143,33 +143,6 @@ function mlmc_logmean(outer::Integer, design_idx, rows, ec::MLMCEig{T}) where T
     total - log(T(length(rows)))
 end
 
-function mlmc_inner_L0(outer::Integer, design_idx::AbstractVector,
-        draw_idx::AbstractVector, ec::MLMCEig{T}) where T
-
-    value = zero(T)
-
-    for des_idx in design_idx
-        lp1_outer = ec.lp_success[outer, des_idx]
-        lp0_outer = ec.lp_fail[outer, des_idx]
-        
-        total1 = T(-Inf)
-        total0 = T(-Inf)
-
-        length(draw_idx) != 1 && error("Cant use more than 1 draw")
-        for draw in draw_idx
-            total1 = ec.lp_success[draw, des_idx]
-            total0 = ec.lp_fail[draw, des_idx]
-        end
-
-        total1 -= log(T(length(draw_idx)))
-        total0 -= log(T(length(draw_idx)))
-
-        value += xexpy(lp1_outer - total1,lp1_outer)
-        value += xexpy(lp0_outer - total0,lp0_outer)
-    end
-    value
-end
-
 """
     mlmc_inner(outer, design_idx, draw_idx, level, ec)
 
@@ -191,7 +164,6 @@ function mlmc_inner(outer::Integer, design_idx::AbstractVector,
     if level == 0
         return mlmc_loglik(outer, design_idx, outer, ec) -
                mlmc_logmean(outer, design_idx, draw_idx, ec)
-        #return mlmc_inner_L0(outer, design_idx, draw_idx, ec)
     end
 
     half = length(draw_idx) ÷ 2
