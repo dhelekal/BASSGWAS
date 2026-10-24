@@ -183,8 +183,8 @@ effects use variance `ps.c`.
 """
 function comp_ll2(scache, qcache, ps, γ, loglik::Aloglik)
     ps.s == scache.covariance.s || throw(ArgumentError("refresh SCache after changing s"))
-    w = prepare_active!(qcache,scache,ps.c,ps.mc)
-    return loglik(w.det,w.ssq)
+    work = prepare_active!(qcache,scache,ps.c,ps.mc)
+    return loglik(work.det,work.ssq)
 end
 
 """
@@ -196,18 +196,18 @@ blocks; removal terms use the inverse diagonal and the shared response solve.
 """
 function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     s == scache.covariance.s || throw(ArgumentError("refresh SCache after changing s"))
-    w = prepare_active!(qcache,scache,c,mc)
+    work = prepare_active!(qcache,scache,c,mc)
     if !isempty(idx0)
         candidate_terms!(dets,ssq,qcache,scache,c)
     end
     lc = log(c)
     @inbounds for i in 1:(qcache.d-1)
         index = qcache.i1_set[i]
-        h = w.invdiag[i]
-        ssq[index] = w.ssq+w.beta[i]^2/h
-        dets[index] = w.det+log(h)-lc
+        invdiag = work.invdiag
+        ssq[index] = work.ssq+work.beta[i]^2/invdiag[i]
+        dets[index] = work.det+log(invdiag[i])-lc
     end
-    return w.det,w.ssq
+    return work.det,work.ssq
 end
 
 

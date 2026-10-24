@@ -77,12 +77,12 @@ get_XtX(qc::QCache) = qc.XtX
 
 function QCache(ps, i1_set, i0_set)
     T = promote_type(float(eltype(ps.Xaug)),float(eltype(ps.U)),float(eltype(ps.S)),float(eltype(ps.Y)),typeof(ps.r),typeof(ps.s))
-    a, P, n, k = length(i1_set),size(ps.Xaug,2),size(ps.Xaug,1),length(ps.S)
-    allocated_model_size = max(4,a)
+    d, paug, n, ns = length(i1_set),size(ps.Xaug,2),size(ps.Xaug,1),length(ps.S)
+    allocated_model_size = max(4,d)
     qc = QCache(collect(Int,i1_set),collect(Int,i0_set),zeros(T,n,allocated_model_size),
-        zeros(T,allocated_model_size,P),zeros(T,allocated_model_size,P),fill(false,allocated_model_size),a,length(i0_set),
-        UInt(1),UInt(0),nothing,ActiveWorkspace(T,n,k,allocated_model_size))
-    for j in 1:a
+        zeros(T,allocated_model_size,paug),zeros(T,allocated_model_size,paug),fill(false,allocated_model_size),d,length(i0_set),
+        UInt(1),UInt(0),nothing,ActiveWorkspace(T,n,ns,allocated_model_size))
+    for j in 1:d
         copyto!(view(qc.xdata,:,j),view(ps.Xaug,:,i1_set[j]))
     end
     mul!(get_XtX(qc),transpose(get_X1(qc)),ps.Xaug)
@@ -94,16 +94,16 @@ function _reserve_active!(qc, needed)
     needed <= allocated_model_size && return nothing
     allocated_model_size = max(needed,2allocated_model_size)
     T = eltype(qc.xdata)
-    x = zeros(T,size(qc.xdata,1),allocated_model_size)
-    xtx = zeros(T,allocated_model_size,size(qc.xtxdata,2))
-    cov = similar(xtx)
-    copyto!(view(x,:,1:qc.d),get_X1(qc))
-    copyto!(view(xtx,1:qc.d,:),get_XtX(qc))
-    copyto!(view(cov,1:qc.d,:),view(qc.covdata,1:qc.d,:))
+    xdata = zeros(T,size(qc.xdata,1),allocated_model_size)
+    xtxdata = zeros(T,allocated_model_size,size(qc.xtxdata,2))
+    covdata = similar(xtxdata)
+    copyto!(view(xdata,:,1:qc.d),get_X1(qc))
+    copyto!(view(xtxdata,1:qc.d,:),get_XtX(qc))
+    copyto!(view(covdata,1:qc.d,:),view(qc.covdata,1:qc.d,:))
     resize!(qc.validrows,allocated_model_size)
     fill!(view(qc.validrows,(qc.d+1):allocated_model_size),false)
-    qc.xdata, qc.xtxdata, qc.covdata = x,xtx,cov
-    qc.work = ActiveWorkspace(T,size(x,1),size(qc.work.qactive,1),allocated_model_size)
+    qc.xdata, qc.xtxdata, qc.covdata = xdata,xtxdata,covdata
+    qc.work = ActiveWorkspace(T,size(xdata,1),size(qc.work.qactive,1),allocated_model_size)
     return nothing
 end
 

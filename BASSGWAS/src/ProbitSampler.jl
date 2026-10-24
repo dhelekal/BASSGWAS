@@ -423,8 +423,8 @@ function get_state(samp::ProbitBVSSampler)
     m = size(V, 2)
     K = [X V]
     
-    w = prepare_active!(qc, sc, c, mc)
-    sigma = draw_Ysigma!(Y, shape, scale, w.ssq, rng)
+    work = prepare_active!(qc, sc, c, mc)
+    sigma = draw_Ysigma!(Y, shape, scale, work.ssq, rng)
     bs = draw_betas(Y, r, c, mc, l, m, K, rng)
     beta = zeros(size(pips,1))
 

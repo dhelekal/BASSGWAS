@@ -218,92 +218,92 @@ function _column_dots!(out,A,x,scale_product,scale_previous)
     return nothing
 end
 
-function _scaled_columns!(cv, data, lo, hi)
-    Q, B, d = cv.QX, data.UtX, cv.d
+function _scaled_columns!(covariance, data, lo, hi)
+    QX, UtX, d = covariance.QX, data.UtX, covariance.d
     @inbounds for j in lo:hi
-        q = zero(eltype(Q))
-        @simd for i in axes(Q, 1)
-            v = d[i] * B[i,j]
-            Q[i,j] = v
+        q = zero(eltype(QX))
+        @simd for i in axes(QX, 1)
+            v = d[i] * UtX[i,j]
+            QX[i,j] = v
             q += v*v
         end
-        g = cv.sinv * data.sqX[j] - q
+        g = covariance.sinv * data.sqX[j] - q
         # Avoid catastrophic cancellation when the column is nearly entirely
         # explained by covariance modes with very large variance.
-        if g <= 64eps(eltype(Q)) * cv.sinv * data.sqX[j]
+        if g <= 64eps(eltype(QX)) * covariance.sinv * data.sqX[j]
             g = zero(g)
             for row in axes(data.Xaug, 1)
                 v = data.Xaug[row,j]
-                for i in axes(B, 1)
-                    v -= data.U[row,i] * B[i,j]
+                for i in axes(UtX, 1)
+                    v -= data.U[row,i] * UtX[i,j]
                 end
-                g += cv.sinv * v*v
+                g += covariance.sinv * v*v
             end
-            for i in axes(B, 1)
-                g += cv.invden[i] * B[i,j]^2
+            for i in axes(UtX, 1)
+                g += covariance.invden[i] * UtX[i,j]^2
             end
         end
-        cv.gramdiag[j] = g
+        covariance.gramdiag[j] = g
     end
     return nothing
 end
 
 function _refresh_covariance!(sc, r, s)
-    cv, data = sc.covariance, sc.data
+    covariance, data = sc.covariance, sc.data
     _positive_variance(r, "r")
     _positive_variance(s, "s")
-    r, s = convert(typeof(cv.r), r), convert(typeof(cv.s), s)
-    if cv.generation != 0 && r == cv.r && s == cv.s
+    r, s = convert(typeof(covariance.r), r), convert(typeof(covariance.s), s)
+    if covariance.generation != 0 && r == covariance.r && s == covariance.s
         return false
     end
-    cv.cdet = _covariance_weights!(cv.d, cv.d2, cv.invden, data.S, r, s, data.n)
-    cv.r, cv.s, cv.sinv = r, s, inv(s)
+    covariance.cdet = _covariance_weights!(covariance.d, covariance.d2, covariance.invden, data.S, r, s, data.n)
+    covariance.r, covariance.s, covariance.sinv = r, s, inv(s)
     blocks = cld(data.paug, CACHE_BLOCK_COLUMNS)
     if Threads.nthreads() > 1 && data.ns * data.paug >= CACHE_THREAD_WORK
         @batch for b in 1:blocks
             lo = (b-1)*CACHE_BLOCK_COLUMNS + 1
-            _scaled_columns!(cv, data, lo, min(lo+CACHE_BLOCK_COLUMNS-1, data.paug))
+            _scaled_columns!(covariance, data, lo, min(lo+CACHE_BLOCK_COLUMNS-1, data.paug))
         end
     else
-        _scaled_columns!(cv, data, 1, data.paug)
+        _scaled_columns!(covariance, data, 1, data.paug)
     end
-    cv.generation += UInt(1)
+    covariance.generation += UInt(1)
     return true
 end
 
 function _refresh_response_terms!(sc)
-    cv, rs, data = sc.covariance, sc.response, sc.data
-    @inbounds @simd for i in eachindex(rs.weighted)
-        rs.weighted[i] = cv.d2[i] * rs.yu[i]
+    covariance, response, data = sc.covariance, sc.response, sc.data
+    @inbounds @simd for i in eachindex(response.weighted)
+        response.weighted[i] = covariance.d2[i] * response.yu[i]
     end
-    copyto!(rs.fx, rs.yx)
+    copyto!(response.fx, response.yx)
     if data.ns > 0
-        _column_dots!(rs.fx, data.UtX, rs.weighted, -one(cv.s), cv.sinv)
+        _column_dots!(response.fx, data.UtX, response.weighted, -one(covariance.s), covariance.sinv)
     else
-        rs.fx .*= cv.sinv
+        response.fx .*= covariance.sinv
     end
     # Orthogonal-complement form avoids subtracting two nearly equal norms.
-    q = cv.sinv * rs.perp2
-    for i in eachindex(rs.yu)
-        q += cv.invden[i] * rs.yu[i]^2
+    q = covariance.sinv * response.perp2
+    for i in eachindex(response.yu)
+        q += covariance.invden[i] * response.yu[i]^2
     end
-    rs.qterm = q
+    response.qterm = q
     return nothing
 end
 
 """Refresh response projections and dependent terms, including in-place Y changes."""
 function update_response!(sc::SCache, Y)
-    data, rs = sc.data, sc.response
+    data, response = sc.data, sc.response
     Y isa AbstractVector && length(Y) == data.n || throw(DimensionMismatch("response must be a vector of the original length"))
-    _column_dots!(rs.yx, data.Xaug, Y, one(eltype(rs.yx)), zero(eltype(rs.yx)))
-    copyto!(rs.residual, Y)
+    _column_dots!(response.yx, data.Xaug, Y, one(eltype(response.yx)), zero(eltype(response.yx)))
+    copyto!(response.residual, Y)
     if data.ns > 0
-        mul!(rs.yu, transpose(data.U), Y)
-        mul!(rs.residual, data.U, rs.yu, -one(eltype(rs.yu)), one(eltype(rs.yu)))
+        mul!(response.yu, transpose(data.U), Y)
+        mul!(response.residual, data.U, response.yu, -one(eltype(response.yu)), one(eltype(response.yu)))
     end
-    rs.yty = dot(Y, Y)
-    rs.perp2 = dot(rs.residual, rs.residual)
-    rs.generation += UInt(1)
+    response.yty = dot(Y, Y)
+    response.perp2 = dot(response.residual, response.residual)
+    response.generation += UInt(1)
     _refresh_response_terms!(sc)
     return nothing
 end
@@ -322,36 +322,36 @@ must be finite and nonnegative; an empty basis is supported. No orthogonality
 check is performed in the hot path.
 """
 function makeSCache(ps::ParState2)
-    X, Y, U, S = ps.Xaug, ps.Y, ps.U, ps.S
-    n, P = size(X)
-    n > 0 && P > 0 && Y isa AbstractVector && size(U,1) == n && length(Y) == n && size(U,2) == length(S) &&
-        length(S) <= n && ps.n == n && ps.p+1 == P ||
+    Xaug, Y, U, S = ps.Xaug, ps.Y, ps.U, ps.S
+    n, paug = size(Xaug)
+    n > 0 && paug > 0 && Y isa AbstractVector && size(U,1) == n && length(Y) == n && size(U,2) == length(S) &&
+        length(S) <= n && ps.n == n && ps.p+1 == paug ||
         throw(DimensionMismatch("design, response and eigenbasis dimensions disagree"))
     all(x -> isfinite(x) && x >= 0, S) || throw(ArgumentError("eigenvalues must be finite and nonnegative"))
     _positive_variance(ps.r, "r")
     _positive_variance(ps.s, "s")
-    T = promote_type(float(eltype(X)), float(eltype(Y)), float(eltype(U)), float(eltype(S)), typeof(ps.r), typeof(ps.s))
-    k = length(S)
-    V = Matrix{T}(undef,n,k)
-    for j in 1:k, i in 1:n
+    T = promote_type(float(eltype(Xaug)), float(eltype(Y)), float(eltype(U)), float(eltype(S)), typeof(ps.r), typeof(ps.s))
+    ns = length(S)
+    V = Matrix{T}(undef,n,ns)
+    for j in 1:ns, i in 1:n
         V[i,j] = U[i,j] * sqrt(S[j])
     end
-    B = Matrix{T}(undef,k,P)
-    k > 0 && mul!(B, transpose(U), X)
-    sqX = zeros(T,P)
-    for j in 1:P
+    UtX = Matrix{T}(undef,ns,paug)
+    ns > 0 && mul!(UtX, transpose(U), Xaug)
+    sqX = zeros(T,paug)
+    for j in 1:paug
         v = zero(T)
         @inbounds @simd for i in 1:n
-            v += abs2(X[i,j])
+            v += abs2(Xaug[i,j])
         end
         sqX[j] = v
     end
-    data = FixedCovarianceData(X,U,S,V,B,sqX,n,P,k)
-    cv = CovarianceState(T(ps.r),T(ps.s),inv(T(ps.s)),zeros(T,k),zeros(T,k),zeros(T,k),
-        zeros(T,k,P),zeros(T,P),zero(T),UInt(0))
-    rs = ResponseState(zeros(T,k),zeros(T,P),zero(T),zero(T),zeros(T,k),
-        zeros(T,n),zeros(T,P),zero(T),UInt(0))
-    sc = SCache(data,cv,rs)
+    data = FixedCovarianceData(Xaug,U,S,V,UtX,sqX,n,paug,ns)
+    covariance = CovarianceState(T(ps.r),T(ps.s),inv(T(ps.s)),zeros(T,ns),zeros(T,ns),zeros(T,ns),
+        zeros(T,ns,paug),zeros(T,paug),zero(T),UInt(0))
+    response = ResponseState(zeros(T,ns),zeros(T,paug),zero(T),zero(T),zeros(T,ns),
+        zeros(T,n),zeros(T,paug),zero(T),UInt(0))
+    sc = SCache(data,covariance,response)
     updateSCache!(sc,ps)
     return sc
 end
