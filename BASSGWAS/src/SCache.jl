@@ -117,7 +117,7 @@ mutable storage.
 
 Legacy read-only properties (`U`, `S`, `V`, `UtX`, `YtU`, `YtX`, `FX`, `QX`,
 `d`, `sqX`, `cdet`, `qterm` and dimensions) remain available. Response row
-properties are transpose views of ordinary vectors. `F` is no longer stored.
+properties are transpose views of ordinary vectors. 
 
 # Fields
 - `data`: Fixed design/eigenbasis inputs, cross-products and dimensions in a
@@ -199,20 +199,15 @@ end
 # Column dots are memory-bound for large predictor sets. Each worker reads
 # contiguous columns and owns disjoint outputs, including strided active rows.
 function _column_dots_block!(out,A,x,scale_product,scale_previous,lo,hi)
-    @inbounds for j in lo:hi
-        q = zero(eltype(out))
-        @simd for i in axes(A,1)
-            q += A[i,j]*x[i]
-        end
-        out[j] = iszero(scale_previous) ? scale_product*q : scale_product*q+scale_previous*out[j]
-    end
+    mul!(view(out,lo:hi), transpose(view(A,:,lo:hi)), x,
+        scale_product, scale_previous)
     return nothing
 end
 
 function _column_dots!(out,A,x,scale_product,scale_previous)
     P = size(A,2)
     blocks = cld(P,CACHE_BLOCK_COLUMNS)
-    if Threads.nthreads() > 1 && length(A) >= CACHE_THREAD_WORK
+    if Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && length(A) >= CACHE_THREAD_WORK
         @batch for b in 1:blocks
             lo = (b-1)*CACHE_BLOCK_COLUMNS+1
             _column_dots_block!(out,A,x,scale_product,scale_previous,lo,min(lo+CACHE_BLOCK_COLUMNS-1,P))

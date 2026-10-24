@@ -112,6 +112,7 @@ function add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
     old = qc.d
     _reserve_active!(qc,old+1)
     pos = searchsortedfirst(i1_set_new,index)
+    #Move columns past insertion position by one
     @inbounds for j in axes(qc.xtxdata,2), i in old:-1:pos
         qc.xtxdata[i+1,j] = qc.xtxdata[i,j]
         qc.covdata[i+1,j] = qc.covdata[i,j]
@@ -120,8 +121,16 @@ function add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
         copyto!(view(qc.xdata,:,i+1),view(qc.xdata,:,i))
         qc.validrows[i+1] = qc.validrows[i]
     end
+    #Insert new column
     copyto!(view(qc.xdata,:,pos),view(ps.Xaug,:,index))
-    _column_dots!(view(qc.xtxdata,pos,:),ps.Xaug,view(ps.Xaug,:,index),one(eltype(qc.xtxdata)),zero(eltype(qc.xtxdata)))
+
+    #Update Column dot products
+    _column_dots!(view(qc.xtxdata, pos, :), 
+        ps.Xaug, 
+        view(ps.Xaug, :, index), 
+        one(eltype(qc.xtxdata)), 
+        zero(eltype(qc.xtxdata)))
+    
     qc.validrows[pos] = false
     qc.d, qc.p = old+1,length(i0_set_new)
     qc.i1_set, qc.i0_set = i1_set_new,i0_set_new
