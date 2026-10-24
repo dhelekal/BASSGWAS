@@ -38,3 +38,18 @@ quadratic forms and cloned RNGs to verify the inverse-gamma draw and liability
 rescaling. These two draw routines assume unit residual variance. Deterministic
 comparisons use `rtol=1e-8` and `atol=1e-10` (normalization checks use the stated
 absolute tolerance).
+## Dependency caches and reusable workspaces
+
+`workspace_tests.jl` checks independent response/covariance invalidation,
+zero and near-zero eigenvalues, empty and rank-one bases, guarded weight
+arithmetic, proposal isolation, and conditional response forms. A long model
+walk forces capacity growth and compares incremental covariance-adjusted
+products with dense reconstruction after additions, removals, and variance
+changes. Allocation checks warm each workspace before measuring and exclude
+predictor-sized temporary arrays. Independent sampler instances are also run
+concurrently with separate RNGs and compared with serial execution.
+
+`SCache` no longer stores `F = Y'C^-1`; cache checks instead validate the
+covariance-adjusted design diagonal against the independent dense precision.
+Timing benchmarks are separate from correctness tests; see
+[`../benchmark/README.md`](../benchmark/README.md).

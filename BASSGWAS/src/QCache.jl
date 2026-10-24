@@ -13,148 +13,110 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-    QCache
+    QCache(ps, active, inactive)
 
-Cache the active design matrix and cross-products used by predictor-toggle
-updates.
-
-The intercept is included in `i1_set` and remains the final active column.
-
-# Fields
-- `i1_set`: Sorted indices of active augmented-design columns.
-- `i0_set`: Sorted indices of inactive predictor columns.
-- `X1`: Active columns of the augmented design matrix.
-- `XtX`: Cross-product of `X1` with every augmented-design column.
-- `XtXb`: Reusable buffer holding the previous cross-product.
-- `d`: Number of active columns, including the intercept.
-- `p`: Number of inactive predictors.
+Capacity-managed active design, raw cross-products and covariance-adjusted
+cross-products. Active indices are sorted and end with the intercept. `X1`
+and `XtX` compatibility properties are views of the used portions of backing
+storage; they must not be retained across capacity growth or model flips.
+`work` owns accepted-model and separate proposal workspaces.
 """
-mutable struct QCache{Ti, Tm, Tn}
-    i1_set::Ti
-    i0_set::Ti
-    X1::Tm
-    XtX::Tm 
-    XtXb::Tm
-
-    d::Tn
-    p::Tn
+mutable struct QCache{T}
+    i1_set::Vector{Int}
+    i0_set::Vector{Int}
+    xdata::Matrix{T}
+    xtxdata::Matrix{T}
+    covdata::Matrix{T}
+    validrows::Vector{Bool}
+    d::Int
+    p::Int
+    generation::UInt
+    cov_generation::UInt
+    cov_source::Union{Nothing,CovarianceState{T}}
+    work::ActiveWorkspace{T}
 end
 
-"""
-    QCache(ps, i1_set, i0_set)
+Base.propertynames(qc::QCache, private::Bool=false) = (fieldnames(typeof(qc))..., :X1, :XtX)
 
-Construct a predictor-toggle cache from `ps.Xaug` and the supplied active and
-inactive one-based column indices.
+@inline function Base.getproperty(qc::QCache, name::Symbol)
+    if name === :X1
+        return view(getfield(qc,:xdata),:,1:getfield(qc,:d))
+    elseif name === :XtX
+        return view(getfield(qc,:xtxdata),1:getfield(qc,:d),:)
+    end
+    return getfield(qc,name)
+end
 
-`i1_set` must include the intercept index. The cache owns newly allocated
-matrix data but retains the supplied index collections.
-"""
+get_X1(qc::QCache) = qc.X1
+get_XtX(qc::QCache) = qc.XtX
+
 function QCache(ps, i1_set, i0_set)
-    d = length(i1_set)
-    p = length(i0_set)
-
-    X1=ps.Xaug[:, i1_set]
-    X=ps.Xaug
-    XtX = X1'X
-
-    QCache(i1_set, i0_set, X1, XtX, copy(XtX), d, p)
+    T = promote_type(float(eltype(ps.Xaug)),float(eltype(ps.U)),float(eltype(ps.S)),float(eltype(ps.Y)),typeof(ps.r),typeof(ps.s))
+    a, P, n, k = length(i1_set),size(ps.Xaug,2),size(ps.Xaug,1),length(ps.S)
+    capacity = max(4,a)
+    qc = QCache(collect(Int,i1_set),collect(Int,i0_set),zeros(T,n,capacity),
+        zeros(T,capacity,P),zeros(T,capacity,P),fill(false,capacity),a,length(i0_set),
+        UInt(1),UInt(0),nothing,ActiveWorkspace(T,n,k,capacity))
+    for j in 1:a
+        copyto!(view(qc.xdata,:,j),view(ps.Xaug,:,i1_set[j]))
+    end
+    mul!(get_XtX(qc),transpose(get_X1(qc)),ps.Xaug)
+    return qc
 end
 
-"""
-    get_XtX(qc::QCache)
-
-Return the cached cross-product between active and augmented-design columns.
-
-The returned matrix aliases storage owned by `qc`.
-"""
-function get_XtX(qc::QCache)
-    return qc.XtX
+function _reserve_active!(qc, needed)
+    capacity = size(qc.xdata,2)
+    needed <= capacity && return nothing
+    capacity = max(needed,2capacity)
+    T = eltype(qc.xdata)
+    x = zeros(T,size(qc.xdata,1),capacity)
+    xtx = zeros(T,capacity,size(qc.xtxdata,2))
+    cov = similar(xtx)
+    copyto!(view(x,:,1:qc.d),get_X1(qc))
+    copyto!(view(xtx,1:qc.d,:),get_XtX(qc))
+    copyto!(view(cov,1:qc.d,:),view(qc.covdata,1:qc.d,:))
+    resize!(qc.validrows,capacity)
+    fill!(view(qc.validrows,(qc.d+1):capacity),false)
+    qc.xdata, qc.xtxdata, qc.covdata = x,xtx,cov
+    qc.work = ActiveWorkspace(T,size(x,1),size(qc.work.qactive,1),capacity)
+    return nothing
 end
 
-"""
-    get_X1(qc::QCache)
-
-Return the cached active design matrix, including the final intercept column.
-
-The returned matrix aliases storage owned by `qc`.
-"""
-function get_X1(qc::QCache)
-    return qc.X1
-end
-
-"""
-    add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
-
-Update `qc` after activating predictor column `index`.
-
-The supplied index sets describe the post-toggle model. The method inserts one
-new cross-product row in sorted active-index order, refreshes `X1`, mutates all
-cache metadata, and returns `nothing`.
-"""
+"""Insert one raw cross-product row; defer its covariance product until synchronization."""
 function add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
-    d = qc.d
-    p = qc.p
-    d_new = d+1
-    p_new = p-1
-
-    i1_new = searchsortedfirst(i1_set_new, index)
-    
-    X = ps.Xaug
-    qc.X1 = X[:, i1_set_new]
-    
-    m = size(qc.XtX, 2)
-
-    qc.XtXb = qc.XtX
-    qc.XtX = similar(qc.XtXb, d_new, m)
-
-    n1 = size(qc.XtX, 1)
-    n2 = size(qc.XtXb, 1)
-
-    copyto!(qc.XtX, 1:(i1_new-1), 1:m, qc.XtXb,  1:(i1_new-1), 1:m)
-    @views Octavian.matmul!(qc.XtX[i1_new, :], X', X[:, index])
-    copyto!(qc.XtX, (i1_new+1):n1, 1:m, qc.XtXb, (i1_new):n2, 1:m)
-
-    qc.d=d_new
-    qc.p=p_new
-    qc.i1_set=i1_set_new
-    qc.i0_set=i0_set_new
-    nothing;
+    old = qc.d
+    _reserve_active!(qc,old+1)
+    pos = searchsortedfirst(i1_set_new,index)
+    @inbounds for j in axes(qc.xtxdata,2), i in old:-1:pos
+        qc.xtxdata[i+1,j] = qc.xtxdata[i,j]
+        qc.covdata[i+1,j] = qc.covdata[i,j]
+    end
+    for i in old:-1:pos
+        copyto!(view(qc.xdata,:,i+1),view(qc.xdata,:,i))
+        qc.validrows[i+1] = qc.validrows[i]
+    end
+    copyto!(view(qc.xdata,:,pos),view(ps.Xaug,:,index))
+    _column_dots!(view(qc.xtxdata,pos,:),ps.Xaug,view(ps.Xaug,:,index),one(eltype(qc.xtxdata)),zero(eltype(qc.xtxdata)))
+    qc.validrows[pos] = false
+    qc.d, qc.p = old+1,length(i0_set_new)
+    qc.i1_set, qc.i0_set = i1_set_new,i0_set_new
+    qc.generation += UInt(1)
+    return nothing
 end
 
-"""
-    remove_active_QC(qc, ps, index, i1_set_new, i0_set_new)
-
-Update `qc` after deactivating predictor column `index`.
-
-The supplied index sets describe the post-toggle model. The method removes the
-corresponding cross-product row, refreshes `X1`, mutates all cache metadata,
-and returns `nothing`.
-"""
+"""Remove one row without recalculating either raw or covariance-adjusted products."""
 function remove_active_QC(qc, ps, index, i1_set_new, i0_set_new)
-    d = qc.d
-    p = qc.p
-    d_new = d-1
-    p_new = p+1
-
-    i1_old = searchsortedfirst(qc.i1_set, index)
-    
-    X = ps.Xaug
-    qc.X1 = X[:, i1_set_new]
-    
-    m = size(qc.XtX, 2)
-
-    qc.XtXb = qc.XtX
-    qc.XtX = similar(qc.XtXb, d_new, m)
-
-    n1 = size(qc.XtX, 1)
-    n2 = size(qc.XtXb, 1)
-
-    copyto!(qc.XtX, 1:(i1_old-1), 1:m,  qc.XtXb, 1:(i1_old-1), 1:m)
-    copyto!(qc.XtX, i1_old:n1,1:m, qc.XtXb, (i1_old+1):n2, 1:m)
-
-    qc.d=d_new
-    qc.p=p_new
-    qc.i1_set=i1_set_new
-    qc.i0_set=i0_set_new
-    nothing;
+    pos, old = searchsortedfirst(qc.i1_set,index),qc.d
+    @inbounds for j in axes(qc.xtxdata,2), i in pos:(old-1)
+        qc.xtxdata[i,j] = qc.xtxdata[i+1,j]
+        qc.covdata[i,j] = qc.covdata[i+1,j]
+    end
+    for i in pos:(old-1)
+        copyto!(view(qc.xdata,:,i),view(qc.xdata,:,i+1))
+        qc.validrows[i] = qc.validrows[i+1]
+    end
+    qc.d, qc.p = old-1,length(i0_set_new)
+    qc.i1_set, qc.i0_set = i1_set_new,i0_set_new
+    qc.generation += UInt(1)
+    return nothing
 end

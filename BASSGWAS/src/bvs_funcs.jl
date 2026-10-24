@@ -95,7 +95,7 @@ function init_state2(loglik::Aloglik, ps, scache, γ0::Array{Int64, 1}; eps = 5.
     idx1 = findall(γ0 .== 1)
     γ = copy(γ0)
 
-    T = eltype(scache.F)
+    T = eltype(scache.response.fx)
 
     ssq = zeros(T, p)
     dets = zeros(T, p)
@@ -129,7 +129,7 @@ end
 Recompute the current collapsed likelihood, one-toggle alternatives, and move
 intensities after model or continuous-parameter changes.
 
-All cached arrays in `state` are updated in place; `qcache` is read only.
+Cached arrays in `state` and the active numerical workspace in `qcache` are updated in place.
 """
 function update_state2!(state, ps, scache, qcache, loglik::Aloglik)
 
@@ -141,8 +141,8 @@ function update_state2!(state, ps, scache, qcache, loglik::Aloglik)
     s = ps.s
     mc = ps.mc
 
-    idx0 = findall(γ .== 0)
-    idx1 = findall(γ .== 1)
+    idx0 = qcache.i0_set
+    idx1 = view(qcache.i1_set,1:(qcache.d-1))
 
     det_curr, ssq_curr = comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     state.ll_curr = loglik(det_curr, ssq_curr)
@@ -182,230 +182,34 @@ The intercept is always included with variance `ps.mc`; active predictor
 effects use variance `ps.c`.
 """
 function comp_ll2(scache, qcache, ps, γ, loglik::Aloglik)
-    s = ps.s
-    c = ps.c
-    mc = ps.mc
-
-    sinv = 1.0/s
-    paug = scache.paug
-
-    i1 = [findall(γ .== 1); paug]
-    
-    cdet = scache.cdet
-    qterm = scache.qterm
-    d = length(i1)
-
-    QX1 = scache.QX[:, i1]
-    FX1 = scache.FX[:, i1]
-    X1 = get_X1(qcache)
-
-    A = sinv * X1'*X1 - QX1'QX1;
-    A += UniformScaling(1.0/c)
-    A[end, end] += (-1.0/c + 1.0/mc)
-
-    AChol = cholesky(Hermitian(A))
-    ldiv!(AChol.U', FX1')
-
-    ssq_curr = -dot(FX1, FX1) + qterm
-    det_curr = logabsdet(AChol)[1]
-    det_curr += cdet + (d-1)*log(c) + log(mc)
-
-    loglik(det_curr, ssq_curr)
+    ps.s == scache.covariance.s || throw(ArgumentError("refresh SCache after changing s"))
+    w = prepare_active!(qcache,scache,ps.c,ps.mc)
+    return loglik(w.det,w.ssq)
 end
 
 """
     comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
 
-Compute collapsed determinant and quadratic-form terms for the current model
-and every one-predictor toggle.
-
-Woodbury and rank-one identities avoid refactorizing a dense covariance for
-each candidate. `dets` and `ssq` are overwritten with alternative-model terms;
-the current model's `(det, ssq)` pair is returned.
+Evaluate all one-predictor alternatives with cached covariance-adjusted
+products and a common active Cholesky. Candidate solves use bounded reusable
+blocks; removal terms use the inverse diagonal and the shared response solve.
 """
 function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
-    
-    paug = scache.paug
-    p = paug-1
-
-    idx1_icept = [idx1; paug]
-    sinv = 1.0/s
-    d = length(idx1_icept)
-
-    QX1 = scache.QX[:, idx1_icept]
-    QX = scache.QX
-
-    X1 = get_X1(qcache)
-    X1tX0 = get_XtX(qcache)
-
-    X1CinvX1 = sinv * X1'*X1
-    X1CinvX1 .-= QX1'QX1
-
-    A = X1CinvX1 + UniformScaling(1.0/c)
-    A[end, end] += (-1.0/c + 1.0/mc)
-
-    AChol = cholesky(Hermitian(A))
-    Ainv = inv(AChol)
-    
-    cinv = 1.0 / c
-
-    FX1 = scache.FX[:,idx1_icept]
-    
-    @views dets .= cinv .+ scache.sqX[1:p] .* sinv
-
-    @views copy!(ssq, scache.FX'[1:p])
-
-    qterm = scache.qterm
-    ssq_curr = -(FX1 * Ainv * FX1') + qterm
-    det_curr = logabsdet(AChol)[1]
-    det_curr += scache.cdet + (d-1)*log(c) + log(mc)
-
-    if (d != paug)
-        _inc_up2!(ssq, dets,
-            c, AChol, QX1, QX, FX1, X1tX0, sinv)
+    s == scache.covariance.s || throw(ArgumentError("refresh SCache after changing s"))
+    w = prepare_active!(qcache,scache,c,mc)
+    if !isempty(idx0)
+        candidate_terms!(dets,ssq,qcache,scache,c)
     end
-
-    _inc_down2!(view(ssq, idx1), view(dets, idx1), 
-        c, Ainv, X1CinvX1, FX1)
-
-    # Add the covariance-only quadratic term to every toggle-specific update.
-    ssq .+= qterm
-    dets .+= det_curr
-
-    return det_curr, ssq_curr
-end
-
-
-"""
-    _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, X1tX0, sinv)
-
-Fill addition-model updates for all predictors using Schur complements of the
-active-model factorization.
-
-Work is divided into thread-sized column blocks. `ssq` and `dets` are mutated
-in place.
-"""
-function _inc_up2!(ssq, dets, c, AChol, QX1, QX, FX1, X1tX0, sinv)
-    n = length(ssq)
-    d = size(FX1, 2) + 1
-
-    # Solve once for the active-model contribution shared by every candidate.
-    U = AChol.U' \ FX1'
-    quad_term = -dot(U,U) 
-
-    AinvBs = copy(X1tX0)
-
-    nt = Threads.nthreads()
-    blck_sz = ceil(Int64,n/nt)
-
-    @batch for i in 1:blck_sz:n
-        j = min(i+blck_sz-1,n)
-        sp = i:j
-        _dets = view(dets, sp)
-        _ssq = view(ssq, sp)
-        _AinvBs = view(AinvBs, :, sp)
-        _QX = view(QX, :, sp)
-        _up_blck2!(_dets, _ssq, _QX, _AinvBs, U, QX1, AChol, sinv, c, quad_term, d)
-    end
-end
-
-"""
-    _up_blck2!(dets, ssq, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
-
-Evaluate one column block of predictor-addition determinant and quadratic-form
-updates.
-
-The supplied arrays are block views owned by `_inc_up2!`; `dets`, `ssq`, and
-`AinvBs` are overwritten in place.
-"""
-function _up_blck2!(dets, ssq, QX, AinvBs, U, QX1, AChol, sinv, c, qterm, d)
-    # Subtract each candidate's low-rank covariance contribution.
-    @turbo for j in axes(QX,2)
-        s = 0.0 
-        for i in axes(QX,1)
-            s += QX[i,j]*QX[i,j]
-        end
-        dets[j] -= s
-    end
-
-    gemm!('T', 'N', -1.0, QX1, QX, sinv, AinvBs)
-    ldiv!(AChol.U', AinvBs)
-
-    @turbo for j in axes(AinvBs,2)
-        s = 0.0 
-        for i in axes(AinvBs,1)
-            x = AinvBs[i,j]
-            s += x*x
-        end
-        dets[j] -= s
-    end
-
-    gemv!('T', 1.0, AinvBs, U, -1.0, ssq)
-
-    @turbo for i in eachindex(dets)
-        w=ssq[i]
-        ssq[i] = -w*w/dets[i] + qterm
-    end
-    
     lc = log(c)
-    @turbo for i in eachindex(dets)
-        x = log(abs(dets[i]))
-        dets[i] = x + lc
+    @inbounds for i in 1:(qcache.d-1)
+        index = qcache.i1_set[i]
+        h = w.invdiag[i]
+        ssq[index] = w.ssq+w.beta[i]^2/h
+        dets[index] = w.det+log(h)-lc
     end
-
-    nothing
+    return w.det,w.ssq
 end
 
-"""
-    _inc_down2!(ssq, dets, c, Ainv, X1tCinvX1, FX1)
-
-Fill removal-model updates for active predictors by downdating the inverse
-active-model system.
-
-The intercept occupies the final row and column and is never removed. `ssq`
-and `dets` are mutated in place.
-"""
-function _inc_down2!(ssq, dets, c, Ainv, X1tCinvX1, FX1)
-    p = size(ssq)[1]
-    paug = size(Ainv)[2]
-
-    if p > 0 
-        nt = Threads.nthreads()
-        blck_sz = ceil(Int64,p/nt)
-        padj = paug-1
-        chunks = collect(Iterators.partition(1:p, blck_sz))
-
-        FX = FX1'
-        A0s = [similar(Ainv, padj, padj) for _ in chunks]
-        bs = [similar(Ainv, padj) for _ in chunks]
-        ys = [similar(Ainv, padj) for _ in chunks]
-        @batch for s in eachindex(chunks)
-            chunk = chunks[s]
-            for i in chunk
-                A0 = A0s[s]
-                b = bs[s]
-                y = ys[s]
-                _copyto_loo!(A0, Ainv, i)
-                @views _copyto_loo!(b, Ainv[:, i], i)
-                dhat = Ainv[i, i]
-                syr!('U', -1.0/dhat, b, A0)
-                
-                _copyto_loo!(b, FX, i)
-                symv!('U', 1.0, A0, b, 0.0, y)
-
-                ssq[i] = -dot(b,y)
-
-                @views _copyto_loo!(b, X1tCinvX1[:, i], i)
-                symv!('U', 1.0, A0, b, 0.0, y)
-
-                d = X1tCinvX1[i, i]
-                det_upd = 1.0/c + d - dot(b,y)
-                dets[i] = -log(c)-log(det_upd)
-            end
-        end   
-    end 
-    nothing
-end
 
 """
     comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
@@ -680,9 +484,7 @@ function _comp_ssq(Y1, Y2, r, c, mc, X, XtX, UtX, U, S)
 
     d = similar(S)
 
-    for i in axes(d,1)
-        d[i] = 1.0/sqrt(1.0/(S[i]*r) + 1.0)
-    end
+    _comp_d!(d, S, r, one(r))
 
     D = Diagonal(d)
 
@@ -723,9 +525,7 @@ function _comp_ssq(Y, r, c, mc, X, XtX, UtX, U, S)
 
     d = similar(S)
 
-    for i in axes(d,1)
-        d[i] = 1.0/sqrt(1.0/(S[i]*r) + 1.0)
-    end
+    _comp_d!(d, S, r, one(r))
 
     D = Diagonal(d)
 
@@ -760,12 +560,9 @@ The method reuses active-design and low-rank cross-products and returns
 function _comp_llterms(Y, r, c, mc, X, XtX, UtX, YtU, S)
     d = similar(S)
 
-    n = size(d, 1)
     k = size(X, 2)
 
-    for i in axes(d,1)
-        d[i] = 1.0/sqrt(1.0/(S[i]*r) + 1.0)
-    end
+    _comp_d!(d, S, r, one(r))
 
     D = Diagonal(d)
     Fl = D*YtU'
@@ -785,10 +582,9 @@ function _comp_llterms(Y, r, c, mc, X, XtX, UtX, YtU, S)
 
     ssq = -dot(FX, FX) + qterm
     
-    cdet = -2.0*(logabsdet(D)[1])+ n*log(r)
-    for i in eachindex(S)
-         cdet += log(abs(S[i]))
-    end
+    # Stand-alone compatibility path; the sampler uses proposal_terms! and
+    # retains all of this workspace across proposals.
+    cdet = _covariance_weights!(d, similar(d), similar(d), S, r, one(r), size(X,1))
 
     det_curr = 2.0*logabsdet(Atr)[1]
     det_curr += cdet + (k-1)*log(c) + log(mc)

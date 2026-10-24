@@ -28,7 +28,7 @@ function numerical_fixture(p; rank=3, design=:correlated, alpha=0.7, beta=2.3,
     # Deterministic orthonormal DCT basis: truncated and full eigensystems.
     U = [j == 1 ? 1 / sqrt(n) : sqrt(2 / n) * cospi((i - 0.5) * (j - 1) / n)
          for i in 1:n, j in 1:rank]
-    S = collect(range(0.4, 1.8; length=rank))
+    S = rank == 1 ? [0.4] : collect(range(0.4, 1.8; length=rank))
     Y = [0.7, -1.1, 0.3, 1.4, -0.6, 0.2, -0.9, 0.8]
     BASSGWAS.ParState2(X, Y, U, S, alpha, beta, 1.7, 0.8, s, 4.2)
 end

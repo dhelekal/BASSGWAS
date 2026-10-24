@@ -7,7 +7,7 @@ function check_scache(sc, ps)
     C = ps.s * Matrix{Float64}(I, ps.n, ps.n) + ps.r * ps.U * Diagonal(ps.S) * ps.U'
     F = cholesky(Symmetric(C))
     precision = F \ Matrix{Float64}(I, ps.n, ps.n)
-    @test isapprox(sc.F, ps.Y' * precision; rtol=NUM_RTOL, atol=NUM_ATOL)
+    @test isapprox(sc.covariance.gramdiag, diag(ps.Xaug' * precision * ps.Xaug); rtol=NUM_RTOL, atol=NUM_ATOL)
     @test isapprox(sc.FX, ps.Y' * precision * ps.Xaug; rtol=NUM_RTOL, atol=NUM_ATOL)
     @test isapprox(sc.qterm, dot(ps.Y, F \ ps.Y); rtol=NUM_RTOL, atol=NUM_ATOL)
     @test isapprox(sc.cdet, 2 * sum(log, diag(F.L)); rtol=NUM_RTOL, atol=NUM_ATOL)

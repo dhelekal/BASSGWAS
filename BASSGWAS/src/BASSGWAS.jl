@@ -40,6 +40,7 @@ using UnPack
 include("utils.jl")
 include("ParState.jl")
 include("SCache.jl")
+include("ActiveWorkspace.jl")
 include("QCache.jl")
 include("likelihoods.jl")
 include("bvs_funcs.jl")

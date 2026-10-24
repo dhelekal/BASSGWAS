@@ -23,5 +23,6 @@ using Test
     @safetestset "Update rates and transitions" begin include("rate_tests.jl") end
     @safetestset "Numerical cache updates" begin include("cache_tests.jl") end
     @safetestset "Continuous conditional draws" begin include("conditional_draw_tests.jl") end
+    @safetestset "Dependency caches and workspaces" begin include("workspace_tests.jl") end
     @safetestset "Full-model regressions" begin include("boundary_regression_tests.jl") end
 end

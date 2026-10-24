@@ -118,8 +118,6 @@ function ProbitBVSSampler(X::AbstractMatrix{Tx}, Y::AbstractVector{Ty}, U::Abstr
 
     adaptor = RWMAdaptor(sample_c ? 2 : 1, 25*div(nadapt,12))
 
-    updateSCache!(cache, parState)
-    update_state2!(tgsstate, parState, cache, qcache, loglik)
     return ProbitBVSSampler(parState, cache, tgsstate, qcache, loglik, 0, 0, nadapt, !adapt_xi, adapt_xi, xi_targ, sample_c, adaptor, shape, scale, rng)
 end
 
@@ -193,11 +191,6 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     mc = ps.mc
 
     X = get_X1(qc)
-    XtX = X'X
-    UtX = sc.UtX[:, qc.i1_set]
-    YtU = sc.YtU
-    U = sc.U
-    S = sc.S
     V = sc.V
 
     # Proposals are made on positive standard-deviation scales and squared after acceptance.
@@ -229,7 +222,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         prll_curr = logpdf(rprior,rsqrt) + logpdf(cprior,csqrt)
         prll_prop = logpdf(rprior,rprop) + logpdf(cprior,cprop)
         
-        ssq, det = _comp_llterms(Y, rprop*rprop, cprop*cprop, mc, X, XtX, UtX, YtU, S)
+        ssq, det = proposal_terms!(qc, sc, rprop*rprop, cprop*cprop, mc)
         ll_prop = samp.loglik(det, ssq)
 
         qr = ll_prop + prll_prop - ll_curr - prll_curr
@@ -258,15 +251,18 @@ function gibbs_CG!(samp::ProbitBVSSampler)
 
     n = size(Y, 1)
     l = size(X, 2)
-    m = size(U, 2)
+    m = sc.ns
 
     # Active predictors, intercept, and random-effect basis form the Gaussian model matrix.
     K = [X V]
     Y_old = copy(Y)
     
+    # Prepare the accepted factor once, independently of the last proposal.
+    accepted_ssq, _ = proposal_terms!(qc, sc, r_new, c_new, mc)
+
     # Draw an auxiliary residual scale on a copy used only for coefficients.
     if scalemv && scale1
-        _ = draw_Ysigma!(Y_old, r_new, c_new, mc, shape, scale, X, XtX, UtX, U, S, rng)
+        _ = draw_Ysigma!(Y_old, shape, scale, accepted_ssq, rng)
     end
 
     beta = draw_betas(Y_old, r_new, c_new, mc, l, m, K, rng)
@@ -289,9 +285,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         sig=10.0
         mu = rand(rng, Normal(0.0, sig))
         Y_new .+= mu
-        I1 = ones(n)
-        sqI1 = _comp_ssq(I1, r_new, c_new, mc, X, XtX, UtX, U, S)
-        YI1 = _comp_ssq(I1, Y_new, r_new, c_new, mc, X, XtX, UtX, U, S)
+        sqI1, YI1 = shift_terms!(qc, sc, Y_new)
         tauup = (1.0/sig*sig + sqI1)
         sigup = 1.0/tauup
         muup = YI1 * sigup
@@ -308,7 +302,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     end
 
     if scalemv && !scale1
-        _ = draw_Ysigma!(Y_new, r_new, c_new, mc, shape, scale, X, XtX, UtX, U, S, rng)
+        _ = draw_Ysigma!(Y_new, shape, scale, response_ssq!(qc, sc, Y_new), rng)
     end
     
     ps.Y = Y_new
@@ -328,11 +322,13 @@ model and standardize `Y` by the sampled standard deviation.
 returned.
 """
 function draw_Ysigma!(Y, r, c, mc, shape, scale, X, XtX, UtX, U, S, rng)
-    n = size(Y, 1)
-    
     ssq = _comp_ssq(Y, r, c, mc, X, XtX, UtX, U, S)
-            
-    aup = shape + n/2.0
+    return draw_Ysigma!(Y, shape, scale, ssq, rng)
+end
+
+# Shared draw preserves RNG ordering for both cached and stand-alone callers.
+function draw_Ysigma!(Y, shape, scale, ssq, rng)
+    aup = shape + length(Y)/2.0
     bup = scale + ssq/2.0
             
     sigma = rand(rng, InverseGamma(aup, bup))
@@ -421,17 +417,14 @@ function get_state(samp::ProbitBVSSampler)
 
     X = get_X1(qc)
 
-    XtX = X'X
-    UtX = sc.UtX[:, qc.i1_set]
-    U = sc.U
-    S = sc.S
     V = sc.V
    
     l = size(X, 2)
     m = size(V, 2)
     K = [X V]
     
-    sigma = draw_Ysigma!(Y, r, c, mc, shape, scale, X, XtX, UtX, U, S, rng)
+    w = prepare_active!(qc, sc, c, mc)
+    sigma = draw_Ysigma!(Y, shape, scale, w.ssq, rng)
     bs = draw_betas(Y, r, c, mc, l, m, K, rng)
     beta = zeros(size(pips,1))
 
