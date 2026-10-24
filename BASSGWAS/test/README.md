@@ -43,7 +43,7 @@ absolute tolerance).
 `workspace_tests.jl` checks independent response/covariance invalidation,
 zero and near-zero eigenvalues, empty and rank-one bases, guarded weight
 arithmetic, proposal isolation, and conditional response forms. A long model
-walk forces capacity growth and compares incremental covariance-adjusted
+walk forces growth in allocated model size and compares incremental covariance-adjusted
 products with dense reconstruction after additions, removals, and variance
 changes. Allocation checks warm each workspace before measuring and exclude
 predictor-sized temporary arrays. Independent sampler instances are also run

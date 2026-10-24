@@ -154,10 +154,10 @@ function workspace_fixture(p; n=32,k=8,a=10,seed=93)
     return ps,sc,state,qc,ll
 end
 
-@testset "Incremental products through capacity growth and covariance changes" begin
+@testset "Incremental products through growth in allocated model size and covariance changes" begin
     ps,sc,state,qc,ll = workspace_fixture(24;a=0)
     rng = Xoshiro(7)
-    # The prefix forces capacity growth; the random walk then exercises removal,
+    # The prefix forces growth in allocated model size; the random walk then exercises removal,
     # insertion at either end, response-only refresh and covariance invalidation.
     for (step,index) in enumerate([collect(1:24);rand(rng,1:24,250)])
         BASSGWAS.flip_gamma!(state,ps,qc,index)
@@ -181,7 +181,7 @@ end
 
 function workspace_allocations(p)
     ps,sc,state,qc,ll = workspace_fixture(p)
-    # Reserve enough capacity for repeated additions/removals before measuring.
+    # Reserve a large enough model size for repeated additions/removals before measuring.
     BASSGWAS._reserve_active!(qc,qc.d+1)
     BASSGWAS.update_state2!(state,ps,sc,qc,ll)
     ids1 = sort([qc.i1_set;p]); ids0 = collect(11:(p-1))

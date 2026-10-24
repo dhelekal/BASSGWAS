@@ -37,6 +37,10 @@ using Random
 using StatsBase
 using UnPack
 
+# Internal cache-kernel tuning parameters.
+const CACHE_BLOCK_COLUMNS = 256
+const CACHE_THREAD_WORK = 32768
+
 include("utils.jl")
 include("ParState.jl")
 include("SCache.jl")

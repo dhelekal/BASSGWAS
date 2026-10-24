@@ -46,7 +46,7 @@ Representative allocated bytes with four Julia threads:
 
 With one Julia thread, warmed cache refreshes, unchanged-model updates and proposal evaluations measured zero allocated bytes. The remaining flip allocation is predominantly predictor-index bookkeeping, proportional to predictor count; it is not an active-by-predictor matrix allocation. Auxiliary transitions still allocate coefficient-draw and latent-response arrays, which are outside this first refactor.
 
-Lower recurring allocation comes with retained covariance-adjusted active products. Their logical size is `a × (p + 1)` floating-point values; backing arrays reserve geometric capacity and worker scratch is bounded by `capacity × 256 × workers`. No full predictor-by-predictor Gram matrix is retained. Capacity growth itself allocates and is excluded from warmed measurements.
+Lower recurring allocation comes with retained covariance-adjusted active products. Their logical size is `a × (p + 1)` floating-point values; backing arrays reserve geometrically growing model sizes and worker scratch is bounded by `allocated_model_size × 256 × workers`. No full predictor-by-predictor Gram matrix is retained. Growth in allocated model size itself allocates and is excluded from warmed measurements.
 
 The gain is largest for repeated model updates and removals. Complete auxiliary transitions benefit less because covariance changes still require rebuilding active products and coefficient draws retain their existing implementation. Timings were collected before the final failure-propagation guard and introspection checks; those do not change numerical work or matrix allocation scaling.
 

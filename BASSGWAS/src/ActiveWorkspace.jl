@@ -12,7 +12,49 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""Scratch for proposals and conditional response forms; never aliases accepted cache arrays."""
+"""
+    ProposalWorkspace
+
+Scratch for proposals and conditional response forms; never aliases accepted
+cache arrays. Let `a` be the current active-column count including the
+intercept. `allocated_model_size` is the number of active columns storage can
+hold, including the intercept. Only the leading `a` entries or corresponding
+matrix portions are used for active quantities.
+
+# Fields
+
+- `gram`: `allocated_model_size × allocated_model_size` buffer holding `X_A' * X_A` in its leading
+  `a × a` portion, gathered once per active-model generation.
+- `utx`: `ns × allocated_model_size` buffer holding `U' * X_A` in its first `a` columns.
+- `weighted_design`: `ns × allocated_model_size` workspace for `Diagonal(d) * utx`.
+- `factor`: `allocated_model_size × allocated_model_size` buffer whose leading lower triangle stores
+  the Cholesky factor of the proposed active precision
+  `A = X_A' * inv(C) * X_A + Diagonal([1/c, ..., 1/mc])`.
+- `d`: Length-`ns` square-root Woodbury weights for the prepared proposal.
+- `d2`: Length-`ns` squared Woodbury weights for the prepared proposal.
+- `invden`: Length-`ns` vector with entries `1 / (s + r*S[i])`.
+- `weighted_y`: Length-`ns` scratch for `d2 .* (U' * Y)` or the corresponding
+  intercept projection during shift calculations.
+- `fx`: Length-`allocated_model_size` response-form workspace: first holds
+  `X_A' * inv(C) * Y`, then its solve through the lower Cholesky factor.
+- `ones_fx`: Length-`allocated_model_size` workspace for the analogous intercept form
+  `X_A' * inv(C) * ones(n)` and its lower-triangular solve.
+- `yu`: Length-`ns` projection buffer `U' * Y` for newly supplied responses.
+- `residual`: Length-`n` scratch for `Y - U * yu` in response quadratic forms.
+- `design_generation`: Active-model generation of the cached `gram` and
+  `utx`; `typemax(UInt)` denotes invalid or uninitialized storage.
+- `factor_generation`: Active-model generation of the prepared factor;
+  validity also requires matching `r`, `s`, `c` and `mc`. `typemax(UInt)`
+  denotes an invalid or uninitialized factor.
+- `r`: Random-effect variance multiplier of the prepared factor.
+- `s`: Residual variance multiplier of the prepared factor.
+- `c`: Selectable-predictor prior variance of the prepared factor.
+- `mc`: Intercept prior variance of the prepared factor. Variance fields are
+  initialized to `NaN` until a factor is prepared successfully.
+- `cdet`: Proposed base-covariance log determinant `logdet(C)`.
+- `det`: Collapsed model log determinant, including active predictor and
+  intercept prior contributions.
+"""
 mutable struct ProposalWorkspace{T}
     gram::Matrix{T}
     utx::Matrix{T}
@@ -42,7 +84,45 @@ function ProposalWorkspace(::Type{T}, n, k, a) where T
         zeros(T,k),zeros(T,n),typemax(UInt),typemax(UInt),T(NaN),T(NaN),T(NaN),T(NaN),zero(T),zero(T))
 end
 
-"""Active Cholesky, response solves and bounded, worker-owned candidate scratch."""
+"""
+    ActiveWorkspace
+
+Active Cholesky, response solves and bounded, worker-owned candidate scratch.
+Let `a` include the active predictors and final intercept. Active matrix and
+vector buffers reserve `allocated_model_size` columns or entries; their leading `a`
+portions contain the current model's quantities.
+
+# Fields
+
+- `qactive`: `ns × allocated_model_size` gather buffer for active columns of `QX`, used
+  when rebuilding all covariance-adjusted active products.
+- `factor`: `allocated_model_size × allocated_model_size` buffer whose leading lower triangle stores
+  `L`, the Cholesky factor of the accepted active precision `A`.
+- `invlower`: `allocated_model_size × allocated_model_size` scratch holding `inv(L)` in its leading
+  `a × a` portion to obtain the inverse-precision diagonal.
+- `u`: Length-`allocated_model_size` buffer whose first `a` entries hold
+  `L \\ (X_A' * inv(C) * Y)`.
+- `beta`: Length-`allocated_model_size` buffer whose first `a` entries hold
+  `inv(A) * X_A' * inv(C) * Y`.
+- `invdiag`: Length-`allocated_model_size` buffer holding `diag(inv(A))` in its first `a`
+  entries for predictor-removal updates.
+- `blocks`: One `allocated_model_size × CACHE_BLOCK_COLUMNS` matrix per worker for
+  candidate cross-products and their in-place lower-triangular solves.
+- `invalid_candidates`: One failure slot per worker: zero on success, or the
+  index of a candidate with a nonpositive Schur complement. Failures are
+  raised on the calling task after workers finish.
+- `factor_key`: Tuple `(model_generation, covariance_generation, c, mc)`
+  identifying the accepted factor. Invalid keys use `typemax(UInt)` counters
+  and `NaN` variances.
+- `response_generation`: Response generation used by `u`, `beta` and `ssq`;
+  `typemax(UInt)` marks invalid or uninitialized response solves.
+- `det`: Accepted collapsed model log determinant, including covariance and
+  coefficient-prior contributions.
+- `ssq`: Accepted collapsed response quadratic form
+  `Y' * inv(C) * Y - dot(u, u)`.
+- `proposal`: Independent `ProposalWorkspace` for variance proposals and
+  conditional response forms, preserving the accepted cache contents.
+"""
 mutable struct ActiveWorkspace{T}
     qactive::Matrix{T}
     factor::Matrix{T}
@@ -66,8 +146,8 @@ function ActiveWorkspace(::Type{T}, n, k, a) where T
         ProposalWorkspace(T,n,k,a))
 end
 
-# The numerical kernels only use strided, contiguous-column views of capacity
-# buffers. Index-vector gathers are copied into those buffers once per model.
+# Numerical kernels use strided, contiguous-column views of reserved storage.
+# Index-vector gathers are copied into those buffers once per model.
 function _active_product_block!(qc, sc, lo, hi)
     a = qc.d
     G = view(qc.covdata,1:a,lo:hi)

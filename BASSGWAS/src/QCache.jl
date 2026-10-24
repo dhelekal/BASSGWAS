@@ -15,11 +15,36 @@
 """
     QCache(ps, active, inactive)
 
-Capacity-managed active design, raw cross-products and covariance-adjusted
-cross-products. Active indices are sorted and end with the intercept. `X1`
+Active design, raw cross-products and covariance-adjusted cross-products
+with storage reserved for an allocated model size. Active indices are sorted and end with the intercept. `X1`
 and `XtX` compatibility properties are views of the used portions of backing
-storage; they must not be retained across capacity growth or model flips.
+storage; they must not be retained across growth in allocated model size or model flips.
 `work` owns accepted-model and separate proposal workspaces.
+`allocated_model_size` is the number of active columns storage can hold,
+including the intercept; `d` is the current model size.
+
+# Fields
+- `i1_set`: Sorted active intercept-augmented-design column indices, with the intercept
+  last; its length is `d`.
+- `i0_set`: Sorted inactive predictor indices; excludes the intercept.
+- `xdata`: `n × allocated_model_size` backing matrix whose first `d` columns hold the active
+  design `X_A`; exposed as the `X1` view.
+- `xtxdata`: `allocated_model_size × paug` backing matrix whose first `d` rows hold
+  `X_A' * Xaug`; exposed as the `XtX` view.
+- `covdata`: `allocated_model_size × paug` backing matrix whose valid active rows hold
+  `X_A' * inv(C) * Xaug` for the recorded covariance source and generation.
+- `validrows`: Per-allocated-row validity flags for `covdata`; only the first
+  `d` entries are relevant. Inserted rows remain invalid until synchronized.
+- `d`: Number of active columns, including the intercept.
+- `p`: Number of inactive selectable predictors, equal to `length(i0_set)`.
+- `generation`: Active-model change counter, incremented on additions and
+  removals to invalidate active factorizations and proposal design gathers.
+- `cov_generation`: Covariance generation used to compute the adjusted rows;
+  zero before their first synchronization.
+- `cov_source`: Identity of the `CovarianceState` supplying those rows, or
+  `nothing` before synchronization; distinguishes caches with equal counters.
+- `work`: Owned `ActiveWorkspace` with factorization, response-solve,
+  candidate-block and independent proposal storage.
 """
 mutable struct QCache{T}
     i1_set::Vector{Int}
@@ -53,10 +78,10 @@ get_XtX(qc::QCache) = qc.XtX
 function QCache(ps, i1_set, i0_set)
     T = promote_type(float(eltype(ps.Xaug)),float(eltype(ps.U)),float(eltype(ps.S)),float(eltype(ps.Y)),typeof(ps.r),typeof(ps.s))
     a, P, n, k = length(i1_set),size(ps.Xaug,2),size(ps.Xaug,1),length(ps.S)
-    capacity = max(4,a)
-    qc = QCache(collect(Int,i1_set),collect(Int,i0_set),zeros(T,n,capacity),
-        zeros(T,capacity,P),zeros(T,capacity,P),fill(false,capacity),a,length(i0_set),
-        UInt(1),UInt(0),nothing,ActiveWorkspace(T,n,k,capacity))
+    allocated_model_size = max(4,a)
+    qc = QCache(collect(Int,i1_set),collect(Int,i0_set),zeros(T,n,allocated_model_size),
+        zeros(T,allocated_model_size,P),zeros(T,allocated_model_size,P),fill(false,allocated_model_size),a,length(i0_set),
+        UInt(1),UInt(0),nothing,ActiveWorkspace(T,n,k,allocated_model_size))
     for j in 1:a
         copyto!(view(qc.xdata,:,j),view(ps.Xaug,:,i1_set[j]))
     end
@@ -65,20 +90,20 @@ function QCache(ps, i1_set, i0_set)
 end
 
 function _reserve_active!(qc, needed)
-    capacity = size(qc.xdata,2)
-    needed <= capacity && return nothing
-    capacity = max(needed,2capacity)
+    allocated_model_size = size(qc.xdata,2)
+    needed <= allocated_model_size && return nothing
+    allocated_model_size = max(needed,2allocated_model_size)
     T = eltype(qc.xdata)
-    x = zeros(T,size(qc.xdata,1),capacity)
-    xtx = zeros(T,capacity,size(qc.xtxdata,2))
+    x = zeros(T,size(qc.xdata,1),allocated_model_size)
+    xtx = zeros(T,allocated_model_size,size(qc.xtxdata,2))
     cov = similar(xtx)
     copyto!(view(x,:,1:qc.d),get_X1(qc))
     copyto!(view(xtx,1:qc.d,:),get_XtX(qc))
     copyto!(view(cov,1:qc.d,:),view(qc.covdata,1:qc.d,:))
-    resize!(qc.validrows,capacity)
-    fill!(view(qc.validrows,(qc.d+1):capacity),false)
+    resize!(qc.validrows,allocated_model_size)
+    fill!(view(qc.validrows,(qc.d+1):allocated_model_size),false)
     qc.xdata, qc.xtxdata, qc.covdata = x,xtx,cov
-    qc.work = ActiveWorkspace(T,size(x,1),size(qc.work.qactive,1),capacity)
+    qc.work = ActiveWorkspace(T,size(x,1),size(qc.work.qactive,1),allocated_model_size)
     return nothing
 end
 

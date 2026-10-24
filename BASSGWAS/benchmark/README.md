@@ -14,7 +14,7 @@ synthetic inputs. Large cases require several GB of available memory.
 
 The script reports median warmed elapsed time and allocated bytes. Model setup
 and the opposite toggle are excluded from addition/removal measurements.
-Capacity growth is warmed before measuring. `same_state_update` measures reuse
+Growth in allocated model size is warmed before measuring. `same_state_update` measures reuse
 without a flip; `add_and_update` and `remove_and_update` include the actual
 model change. `covariance_and_response` changes `r` before each refresh, whereas
 `response_refresh` leaves `r, s` unchanged. Proposal measurements evaluate 25
@@ -44,7 +44,7 @@ always reprojects the response, including when it was modified in place.
 Replacing or modifying fixed inputs requires reconstructing the cache.
 
 `QCache` retains raw and covariance-adjusted active-by-predictor products.
-Each grows geometrically with active-model capacity. A flip adds or removes
+Each grows geometrically with allocated model size. A flip adds or removes
 one row; a covariance-generation change rebuilds adjusted rows. The `X1` and
 `XtX` compatibility properties return views that must not be retained across
 model changes. Accepted factorizations are keyed by model generation,

@@ -12,7 +12,24 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-# The large arrays in FixedCovarianceData are read-only for the cache lifetime.
+"""
+    FixedCovarianceData
+
+Fixed design and covariance eigenbasis data, read-only for the cache lifetime.
+Let `n` be the observation count, `paug` the augmented predictor count, and
+`ns` the retained covariance rank. The intercept is the final design column.
+
+# Fields
+- `Xaug`: Shared `n × paug` design matrix, including the intercept.
+- `U`: Shared `n × ns` matrix of orthonormal covariance eigenvectors.
+- `S`: Shared length-`ns` vector of nonnegative covariance eigenvalues.
+- `V`: Cached `n × ns` covariance square-root factor `U * Diagonal(sqrt.(S))`.
+- `UtX`: Cached `ns × paug` projection `U' * Xaug`.
+- `sqX`: Length-`paug` vector of squared Euclidean design-column norms.
+- `n`: Number of observations.
+- `paug`: Number of augmented predictors, including the intercept.
+- `ns`: Number of retained covariance modes; may be zero.
+"""
 struct FixedCovarianceData{TX,TU,TS,T}
     Xaug::TX
     U::TU
@@ -25,6 +42,25 @@ struct FixedCovarianceData{TX,TU,TS,T}
     ns::Int
 end
 
+"""
+    CovarianceState
+
+Quantities depending on the base covariance `C = s*I + r*U*Diagonal(S)*U'`.
+They are refreshed when either positive variance multiplier changes.
+
+# Fields
+- `r`: Random-effect variance multiplier used by the cached quantities.
+- `s`: Residual variance multiplier used by the cached quantities.
+- `sinv`: Cached reciprocal `1/s`.
+- `d`: Length-`ns` vector of nonnegative square roots of the Woodbury weights.
+- `d2`: Squared weights, `r*S[i] / (s * (s + r*S[i]))` for each mode.
+- `invden`: Length-`ns` vector with entries `1 / (s + r*S[i])`.
+- `QX`: `ns × paug` matrix `Diagonal(d) * UtX`.
+- `gramdiag`: Length-`paug` diagonal of `Xaug' * inv(C) * Xaug`.
+- `cdet`: Base-covariance log determinant `logdet(C)`.
+- `generation`: Covariance refresh counter used to invalidate downstream
+  products and factorizations; zero denotes uninitialized state.
+"""
 mutable struct CovarianceState{T}
     r::T
     s::T
@@ -38,6 +74,25 @@ mutable struct CovarianceState{T}
     generation::UInt
 end
 
+"""
+    ResponseState
+
+Single-response projections and covariance-adjusted forms. Projections change
+when the response changes; `weighted`, `fx` and `qterm` also change when the
+base covariance changes.
+
+# Fields
+- `yu`: Length-`ns` projection `U' * Y`.
+- `yx`: Length-`paug` cross-product `Xaug' * Y`.
+- `yty`: Squared response norm `dot(Y, Y)`.
+- `perp2`: Squared norm of the orthogonal residual `Y - U * yu`.
+- `weighted`: Length-`ns` workspace holding `d2 .* yu`.
+- `residual`: Length-`n` buffer holding `Y - U * yu` after response refresh.
+- `fx`: Length-`paug` vector `Xaug' * inv(C) * Y`.
+- `qterm`: Base-covariance response quadratic form `Y' * inv(C) * Y`.
+- `generation`: Response refresh counter used to invalidate active response
+  solves; covariance-only refreshes do not increment it.
+"""
 mutable struct ResponseState{T}
     yu::Vector{T}
     yx::Vector{T}
@@ -63,6 +118,14 @@ mutable storage.
 Legacy read-only properties (`U`, `S`, `V`, `UtX`, `YtU`, `YtX`, `FX`, `QX`,
 `d`, `sqX`, `cdet`, `qterm` and dimensions) remain available. Response row
 properties are transpose views of ordinary vectors. `F` is no longer stored.
+
+# Fields
+- `data`: Fixed design/eigenbasis inputs, cross-products and dimensions in a
+  `FixedCovarianceData` object.
+- `covariance`: `CovarianceState` containing variance-dependent weights,
+  adjusted design products and the covariance generation counter.
+- `response`: `ResponseState` containing current response projections,
+  adjusted forms, reusable buffers and the response generation counter.
 """
 struct SCache{D,T}
     data::D
@@ -132,9 +195,6 @@ function _comp_d!(d, S, r, s)
     end
     return nothing
 end
-
-const CACHE_BLOCK_COLUMNS = 256
-const CACHE_THREAD_WORK = 32768
 
 # Column dots are memory-bound for large predictor sets. Each worker reads
 # contiguous columns and owns disjoint outputs, including strided active rows.
