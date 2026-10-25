@@ -301,7 +301,10 @@ function candidate_terms!(dets,ssq,qc,sc,c)
     
     if nt > 1
         @batch for worker in 1:nt
-            for b in worker:nt:nb
+            # Balance contiguous block ranges across workers.
+            first_block = fld((worker-1)*nb,nt) + 1
+            last_block = fld(worker*nb,nt)
+            for b in first_block:last_block
                 lo = (b-1)*CACHE_BLOCK_COLUMNS+1
                 bad = _candidate_block!(dets,ssq,qc,sc,c,lo,min(lo+CACHE_BLOCK_COLUMNS-1,p),work.blocks[worker])
                 if bad != 0
