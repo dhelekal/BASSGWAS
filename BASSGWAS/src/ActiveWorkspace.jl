@@ -152,12 +152,14 @@ function _active_product_block!(qc, sc, lo, hi)
     d = qc.d
     covdata = view(qc.covdata,1:d,lo:hi)
     copyto!(covdata, view(qc.xtxdata,1:d,lo:hi))
+    
     if sc.ns > 0
         mul!(covdata, transpose(view(qc.work.qactive,:,1:d)), view(sc.QX,:,lo:hi),
             -one(sc.covariance.s), sc.covariance.sinv)
     else
         covdata .*= sc.covariance.sinv
     end
+
     return nothing
 end
 
@@ -165,10 +167,13 @@ end
 function sync_active_products!(qc, sc)
     covariance = sc.covariance
     if qc.cov_source !== covariance || qc.cov_generation != covariance.generation
+       
+        paug = sc.paug
+
         @inbounds for j in 1:qc.d, i in 1:sc.ns
             qc.work.qactive[i,j] = sc.QX[i,qc.i1_set[j]]
         end
-        paug = sc.paug
+
         nb = cld(paug,CACHE_BLOCK_COLUMNS)
         if Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && sc.ns*qc.d*paug >= CACHE_THREAD_WORK
             @batch for b in 1:nb
@@ -178,6 +183,7 @@ function sync_active_products!(qc, sc)
         else
             _active_product_block!(qc,sc,1,paug)
         end
+
         fill!(qc.validrows,true)
         qc.cov_generation = covariance.generation
         qc.cov_source = covariance
@@ -207,26 +213,35 @@ function prepare_active!(qc, sc, c, mc)
     work, d = qc.work, qc.d
     factor_key = (qc.generation,sc.covariance.generation,c,mc)
     factor = view(work.factor,1:d,1:d)
+
     if work.factor_key != factor_key
         # A failed factorization must never leave an old factor_key on modified storage.
         work.factor_key = (typemax(UInt),typemax(UInt),typeof(work.det)(NaN),typeof(work.det)(NaN))
-        @inbounds for j in 1:d, i in 1:d
-            factor[i,j] = qc.covdata[i,qc.i1_set[j]]
+        
+        @inbounds for j in 1:d
+            copyto!(view(factor,:,j), view(qc.covdata,1:d,qc.i1_set[j]))
         end
+
         for i in 1:d
             factor[i,i] += i == d ? inv(mc) : inv(c)
         end
+
         cholesky!(Symmetric(factor,:L))
         work.det = sc.cdet + (d-1)*log(c) + log(mc)
+        
         for i in 1:d
             work.det += 2log(factor[i,i])
         end
+
         invlower = view(work.invlower,1:d,1:d)
         fill!(invlower,zero(eltype(invlower)))
+        
         for i in 1:d
             invlower[i,i] = one(eltype(invlower))
         end
+
         ldiv!(LowerTriangular(factor),invlower)
+
         @inbounds for j in 1:d
             h = zero(eltype(invlower))
             @simd for i in 1:d
@@ -234,20 +249,21 @@ function prepare_active!(qc, sc, c, mc)
             end
             work.invdiag[j] = h
         end
+
         work.factor_key = factor_key
         work.response_generation = typemax(UInt)
     end
+
     if work.response_generation != sc.response.generation
-        @inbounds for i in 1:d
-            work.u[i] = sc.response.fx[qc.i1_set[i]]
-        end
         u = view(work.u,1:d)
+        copyto!(u,view(sc.response.fx,qc.i1_set))
         ldiv!(LowerTriangular(factor),u)
         work.ssq = sc.qterm - dot(u,u)
         copyto!(view(work.beta,1:d),u)
         ldiv!(UpperTriangular(transpose(factor)),view(work.beta,1:d))
         work.response_generation = sc.response.generation
     end
+
     return work
 end
 
@@ -282,6 +298,7 @@ function candidate_terms!(dets,ssq,qc,sc,c)
     fill!(work.invalid_candidates,0)
     # Each worker owns one buffer, independent of task migration/thread IDs.
     nt = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && qc.d*p >= CACHE_THREAD_WORK ? min(length(work.blocks),nb) : 1
+    
     if nt > 1
         @batch for worker in 1:nt
             for b in worker:nt:nb
@@ -300,9 +317,11 @@ function candidate_terms!(dets,ssq,qc,sc,c)
             bad == 0 || throw(PosDefException(bad))
         end
     end
+
     for bad in work.invalid_candidates
         bad == 0 || throw(PosDefException(bad))
     end
+
     return nothing
 end
 
@@ -310,47 +329,55 @@ function prepare_proposal!(qc,sc,r,s,c,mc)
     _positive_variance(c,"c")
     _positive_variance(mc,"mc")
     proposal, d = qc.work.proposal, qc.d
+    
     if proposal.design_generation != qc.generation
         @inbounds for j in 1:d
             index = qc.i1_set[j]
-            for i in 1:d
-                proposal.gram[i,j] = qc.xtxdata[i,index]
-            end
-            for i in 1:sc.ns
-                proposal.utx[i,j] = sc.UtX[i,index]
-            end
+            copyto!(view(proposal.gram,1:d,j),view(qc.xtxdata,1:d,index))
+            copyto!(view(proposal.utx,:,j),view(sc.UtX,:,index))
         end
+
         proposal.design_generation = qc.generation
         proposal.factor_generation = typemax(UInt)
     end
+
     if proposal.factor_generation == qc.generation && (r,s,c,mc) == (proposal.r,proposal.s,proposal.c,proposal.mc)
         return proposal
     end
+
     proposal.factor_generation = typemax(UInt)
     proposal.cdet = _covariance_weights!(proposal.d,proposal.d2,proposal.invden,sc.S,r,s,sc.n)
     weighted_design = view(proposal.weighted_design,:,1:d)
+    
     @inbounds for j in 1:d
         @simd for i in 1:sc.ns
             weighted_design[i,j] = proposal.d[i]*proposal.utx[i,j]
         end
     end
+
     factor = view(proposal.factor,1:d,1:d)
     copyto!(factor,view(proposal.gram,1:d,1:d))
+
     if sc.ns > 0
         mul!(factor,transpose(weighted_design),weighted_design,-one(s),inv(s))
     else
         factor ./= s
     end
+
     for i in 1:d
         factor[i,i] += i == d ? inv(mc) : inv(c)
     end
+
     cholesky!(Symmetric(factor,:L))
     proposal.det = proposal.cdet + (d-1)*log(c) + log(mc)
+
     for i in 1:d
         proposal.det += 2log(factor[i,i])
     end
+
     proposal.r,proposal.s,proposal.c,proposal.mc = r,s,c,mc
     proposal.factor_generation = qc.generation
+
     return proposal
 end
 
@@ -358,23 +385,27 @@ end
 function proposal_terms!(qc,sc,r,c,mc; s=sc.covariance.s)
     proposal = prepare_proposal!(qc,sc,r,s,c,mc)
     d, response = qc.d, sc.response
+
     @inbounds @simd for i in 1:sc.ns
         proposal.weighted_y[i] = proposal.d2[i]*response.yu[i]
     end
+
     fx = view(proposal.fx,1:d)
-    @inbounds for i in 1:d
-        fx[i] = response.yx[qc.i1_set[i]]
-    end
+    copyto!(fx,view(response.yx,qc.i1_set))
+
     if sc.ns > 0
         mul!(fx,transpose(view(proposal.utx,:,1:d)),proposal.weighted_y,-one(s),inv(s))
     else
         fx ./= s
     end
+
     ldiv!(LowerTriangular(view(proposal.factor,1:d,1:d)),fx)
     q = response.perp2/s
+
     for i in 1:sc.ns
         q += proposal.invden[i]*response.yu[i]^2
     end
+
     return q-dot(fx,fx),proposal.det
 end
 
@@ -385,20 +416,22 @@ Intercept projections come from fixed design products. Only Y is projected.
 function shift_terms!(qc,sc,Y)
     proposal, d = qc.work.proposal,qc.d
     fx, ones_fx = view(proposal.fx,1:d), view(proposal.ones_fx,1:d)
+
     if sc.ns > 0
         mul!(proposal.yu,transpose(sc.U),Y)
     end
+
     mul!(fx,transpose(get_X1(qc)),Y)
-    @inbounds for i in 1:d
-        ones_fx[i] = qc.xtxdata[d,qc.i1_set[i]]
-    end
+    copyto!(ones_fx,view(qc.xtxdata,d,qc.i1_set))
     q11, q1y = sc.n/proposal.s, sum(Y)/proposal.s
+
     @inbounds for i in 1:sc.ns
         ui = sc.UtX[i,sc.paug]
         q11 -= proposal.d2[i]*ui^2
         q1y -= proposal.d2[i]*ui*proposal.yu[i]
         proposal.weighted_y[i] = proposal.d2[i]*proposal.yu[i]
     end
+
     if sc.ns > 0
         mul!(fx,transpose(view(proposal.utx,:,1:d)),proposal.weighted_y,-one(proposal.s),inv(proposal.s))
         @inbounds for i in 1:sc.ns
@@ -409,9 +442,11 @@ function shift_terms!(qc,sc,Y)
         fx ./= proposal.s
         ones_fx ./= proposal.s
     end
+
     factor = LowerTriangular(view(proposal.factor,1:d,1:d))
     ldiv!(factor,fx)
     ldiv!(factor,ones_fx)
+
     return q11-dot(ones_fx,ones_fx),q1y-dot(ones_fx,fx)
 end
 
@@ -421,6 +456,7 @@ function response_ssq!(qc,sc,Y)
     fx = view(proposal.fx,1:d)
     mul!(fx,transpose(get_X1(qc)),Y)
     copyto!(proposal.residual,Y)
+
     if sc.ns > 0
         mul!(proposal.yu,transpose(sc.U),Y)
         mul!(proposal.residual,sc.U,proposal.yu,-one(proposal.s),one(proposal.s))
@@ -431,10 +467,14 @@ function response_ssq!(qc,sc,Y)
     else
         fx ./= proposal.s
     end
+
     q = dot(proposal.residual,proposal.residual)/proposal.s
+
     for i in 1:sc.ns
         q += proposal.invden[i]*proposal.yu[i]^2
     end
+
     ldiv!(LowerTriangular(view(proposal.factor,1:d,1:d)),fx)
+
     return q-dot(fx,fx)
 end
