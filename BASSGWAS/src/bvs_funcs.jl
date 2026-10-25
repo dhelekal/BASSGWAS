@@ -21,6 +21,8 @@ selection.
 The state stores the current binary inclusion vector and cached posterior
 quantities for every model reached by toggling one predictor. The intercept is
 handled separately and is not represented in `γ`.
+Numerical arrays and scalars share the concrete floating-point type `T`;
+`p` and the binary inclusion vector use `Int`.
 
 # Fields
 - `p`: Number of selectable predictors.
@@ -35,19 +37,42 @@ handled separately and is not represented in `γ`.
 - `xi`: Auxiliary-update intensity.
 - `eps`: Weighted-TGS regularization weight.
 """
-mutable struct wTGSState2{Tn, Tg, Tv, Tr}
-    p::Tn
-    γ::Tg
-    dets::Tv
-    ssq::Tv
-    llrs::Tv
-    pips::Tv
-    conds::Tv
-    rates::Tv
-    rsums::Tv
-    ll_curr::Tr
-    xi::Tr
-    eps::Tr
+mutable struct wTGSState2{T<:AbstractFloat}
+    p::Int
+    γ::Vector{Int}
+    dets::Vector{T}
+    ssq::Vector{T}
+    llrs::Vector{T}
+    pips::Vector{T}
+    conds::Vector{T}
+    rates::Vector{T}
+    rsums::Vector{T}
+    ll_curr::T
+    xi::T
+    eps::T
+
+    function wTGSState2{T}(p::Integer, γ::AbstractVector{<:Integer},
+                           dets, ssq, llrs, pips, conds, rates, rsums,
+                           ll_curr, xi, eps) where {T<:AbstractFloat}
+        isconcretetype(T) || throw(ArgumentError("state element type must be concrete"))
+        p >= 0 && length(γ) == p &&
+            all(x -> x isa AbstractVector && length(x) == p,(dets,ssq,llrs,pips,conds)) &&
+            rates isa AbstractVector && rsums isa AbstractVector &&
+            length(rates) == p+1 && length(rsums) == p+1 ||
+            throw(DimensionMismatch("state arrays must match predictor and move counts"))
+        all(x -> x == 0 || x == 1,γ) || throw(ArgumentError("inclusion values must be zero or one"))
+        xi, eps = T(xi), T(eps)
+        isfinite(xi) && xi >= 0 || throw(ArgumentError("xi must be finite and nonnegative"))
+        isfinite(eps) && eps >= 0 || throw(ArgumentError("eps must be finite and nonnegative"))
+        return new{T}(p,γ,dets,ssq,llrs,pips,conds,rates,rsums,ll_curr,xi,eps)
+    end
+end
+
+function wTGSState2(p::Integer, γ::AbstractVector{<:Integer}, dets, ssq, llrs,
+                    pips, conds, rates, rsums, ll_curr, xi, eps)
+    T = _state_float_type(map(eltype,(dets,ssq,llrs,pips,conds,rates,rsums))...,
+                         typeof(ll_curr),typeof(xi),typeof(eps))
+    return wTGSState2{T}(p,γ,dets,ssq,llrs,pips,conds,rates,rsums,ll_curr,xi,eps)
 end
 
 """
@@ -71,7 +96,7 @@ function flip_gamma!(state, ps, qcache, to_flip)
         add_active_QC(qcache, ps, to_flip, idx1_icept, idx0)
     else
         remove_active_QC(qcache, ps, to_flip, idx1_icept, idx0)
-    end 
+    end
 end
 
 """
@@ -79,12 +104,21 @@ end
 
 Initialize a weighted-TGS model state and its predictor-toggle cache.
 
-`γ0` is a binary vector with one entry per predictor. The method evaluates the
+`γ0` is an integer or Boolean binary vector with one entry per predictor and
+is copied into `Vector{Int}`. Numerical storage uses the parameter state's
+floating-point type, which must match the cache. The method evaluates the
 current collapsed likelihood, every one-predictor alternative, and the initial
 move intensities. It returns `(state, qcache)`.
 """
-function init_state2(loglik::Aloglik, ps, scache, γ0::Array{Int64, 1}; eps = 5.0, xi_init = 1.0)
+function init_state2(loglik::Aloglik, ps::ParState2{T}, scache,
+                     γ0::AbstractVector{<:Integer}; eps = 5.0, xi_init = 1.0) where {T}
     p = length(γ0)
+    p == ps.p || throw(DimensionMismatch("inclusion vector must match predictor count"))
+    all(x -> x == 0 || x == 1,γ0) || throw(ArgumentError("inclusion values must be zero or one"))
+    eltype(scache.response.fx) === T || throw(ArgumentError("parameter and cache precision must match"))
+    eps, xi_init = T(eps), T(xi_init)
+    isfinite(eps) && eps >= 0 || throw(ArgumentError("eps must be finite and nonnegative"))
+    isfinite(xi_init) && xi_init >= 0 || throw(ArgumentError("xi_init must be finite and nonnegative"))
     alpha = ps.alpha
     beta = ps.beta
     c = ps.c
@@ -93,9 +127,7 @@ function init_state2(loglik::Aloglik, ps, scache, γ0::Array{Int64, 1}; eps = 5.
 
     idx0 = findall(γ0 .== 0)
     idx1 = findall(γ0 .== 1)
-    γ = copy(γ0)
-
-    T = eltype(scache.response.fx)
+    γ = Vector{Int}(γ0)
 
     ssq = zeros(T, p)
     dets = zeros(T, p)
@@ -110,16 +142,16 @@ function init_state2(loglik::Aloglik, ps, scache, γ0::Array{Int64, 1}; eps = 5.
     qcache = QCache(ps, idx1_icept, idx0)
 
     det_curr, ssq_curr = comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
-    ll_curr = loglik(det_curr, ssq_curr)
+    ll_curr = T(loglik(det_curr, ssq_curr))
 
     comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta)
     comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
-    
+
     # The final rate is reserved for an auxiliary, non-predictor update.
     rates[p+1] = xi_init
-    cumsum!(rsums, rates) 
- 
-    state = wTGSState2(p, γ, dets, ssq, llrs, pips, conds, rates, rsums, ll_curr, xi_init, eps)
+    cumsum!(rsums, rates)
+
+    state = wTGSState2{T}(p, γ, dets, ssq, llrs, pips, conds, rates, rsums, ll_curr, xi_init, eps)
     return state, qcache
 end
 
@@ -166,9 +198,9 @@ function sample_next2(state, rng)
     rsums = state.rsums
 
     rtot = rsums[end]
-    r = rand(rng) * rtot 
+    r = rand(rng) * rtot
     move_idx = findfirst(x -> x >= r, rsums)
-    
+
     return move_idx
 end
 
@@ -223,8 +255,9 @@ receives the regularized move intensities. All three arrays are mutated.
 """
 function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
     p = length(conds)
+    p == 0 && return nothing
     w = eps/p
-    
+
     nt = Threads.nthreads()
     blck_sz = ceil(Int64,p/nt)
 
@@ -265,13 +298,14 @@ The calculation combines collapsed likelihood differences with the
 Beta-Binomial prior ratio implied by `alpha` and `beta`.
 """
 function comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta)
-
+    p == 0 && return nothing
+    T = eltype(llrs)
     γ = length(idx1)
     prior_curr = _inc_prior(γ, p, alpha, beta)
     # Compute prior changes for adding or removing one included predictor.
-    lpr_incl = γ < p ? _inc_prior(γ+1, p, alpha, beta) - prior_curr : 0.0
-    lpr_excl = γ > 0 ? _inc_prior(γ-1, p, alpha, beta) - prior_curr : -Inf64
-    
+    lpr_incl = γ < p ? T(_inc_prior(γ+1, p, alpha, beta) - prior_curr) : zero(T)
+    lpr_excl = γ > 0 ? T(_inc_prior(γ-1, p, alpha, beta) - prior_curr) : T(-Inf)
+
     n=size(llrs,1)
     nt = Threads.nthreads()
     blck_sz = ceil(Int64,n/nt)
@@ -315,7 +349,7 @@ function _update_state_test!(state, ps, scache, qcache, loglik::Aloglik; eps=5.0
 
     @unpack p, γ, dets, ssq, llrs, pips, conds, rates, rsums = state
 
-    n = ps.n 
+    n = ps.n
     alpha = ps.alpha
     beta = ps.beta
     c = ps.c
@@ -331,7 +365,7 @@ function _update_state_test!(state, ps, scache, qcache, loglik::Aloglik; eps=5.0
     C = s*Diagonal(ones(n)) + r*scache.U*Diagonal(scache.S)*scache.U'
     X = ps.Xaug
     Y = ps.Y
-    
+
     idx1_icept = [idx1; paug]
     Xγ = X[:, idx1_icept]
     det_curr, ssq_curr = _direct(C, c, mc, Xγ, Y)
@@ -342,7 +376,7 @@ function _update_state_test!(state, ps, scache, qcache, loglik::Aloglik; eps=5.0
 
     comp_llrs!(llrs, dets, ssq, state.ll_curr, idx1, idx0, p, loglik, alpha, beta)
     comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
-    
+
     rates[p+1] = state.xi
     _ = cumsum!(rsums, rates)
     return(logabsdet(C))
@@ -409,7 +443,7 @@ function _ssq_direct(Y1, Y2, r, c, mc, X, U, S)
     n = size(X, 2)
     s = 1.0
     C = s*Diagonal(ones(m)) + r*U*Diagonal(S)*U'
-    
+
     diagshift = c*ones(n)
     diagshift[end] = mc
 
@@ -429,7 +463,7 @@ function _det_direct(r, c, mc, X, U, S)
     n = size(X, 2)
     s = 1.0
     C = s*Diagonal(ones(m)) + r*U*Diagonal(S)*U'
-    
+
     diagshift = c*ones(n)
     diagshift[end] = mc
 
@@ -567,7 +601,7 @@ function _comp_llterms(Y, r, c, mc, X, XtX, UtX, YtU, S)
     D = Diagonal(d)
     Fl = D*YtU'
     D2 = D*D
-    B = D2 * UtX 
+    B = D2 * UtX
     FX = -YtU*B + (Y'*X)
 
     qterm = dot(Y, Y) - dot(Fl, Fl)
@@ -581,7 +615,7 @@ function _comp_llterms(Y, r, c, mc, X, XtX, UtX, YtU, S)
     ldiv!(Atr, FX')
 
     ssq = -dot(FX, FX) + qterm
-    
+
     # Stand-alone compatibility path; the sampler uses proposal_terms! and
     # retains all of this workspace across proposals.
     cdet = _covariance_weights!(d, similar(d), similar(d), S, r, one(r), size(X,1))

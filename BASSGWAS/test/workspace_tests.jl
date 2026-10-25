@@ -2,6 +2,28 @@
 # SPDX-License-Identifier: GPL-3.0-only
 include("numerical_helpers.jl")
 
+@testset "Blocked matrix-vector products with BLAS" begin
+    rng = Xoshiro(411)
+    A, x = randn(rng,32,2048), randn(rng,32)
+    expected = transpose(A)*x
+    original_threads = BLAS.get_num_threads()
+    try
+        for blas_threads in (1,2), strided in (false,true), scale_previous in (0.0,0.7)
+            BLAS.set_num_threads(blas_threads)
+            storage = fill(-99.0,3,2048)
+            out = strided ? view(storage,2,:) : zeros(2048)
+            previous = randn(rng,2048)
+            copyto!(out,previous)
+            scale_previous == 0 && fill!(out,NaN)
+            BASSGWAS._column_dots!(out,A,x,-1.3,scale_previous)
+            @test isapprox(out,-1.3*expected+scale_previous*previous;rtol=NUM_RTOL,atol=NUM_ATOL)
+            @test all(==(-99.0),view(storage,1,:)) && all(==(-99.0),view(storage,3,:))
+        end
+    finally
+        BLAS.set_num_threads(original_threads)
+    end
+end
+
 @testset "Dependency-specific cache refreshes" begin
     ps = numerical_fixture(4)
     sc = BASSGWAS.makeSCache(ps)

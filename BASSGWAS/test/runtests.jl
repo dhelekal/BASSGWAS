@@ -18,6 +18,7 @@ using Test
 # Keep failures in one group from preventing the remaining groups from running.
 # Each SafeTestset isolates imports, helper definitions, and local RNGs.
 @testset "BASSGWAS" begin
+    @safetestset "Floating-point state types" begin include("state_type_tests.jl") end
     @safetestset "bvs tests" begin include("wtgs_tests.jl") end
     @safetestset "Exact conditional posteriors" begin include("posterior_tests.jl") end
     @safetestset "Update rates and transitions" begin include("rate_tests.jl") end

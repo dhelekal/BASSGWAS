@@ -16,6 +16,7 @@
     FixedCovarianceData
 
 Fixed design and covariance eigenbasis data, read-only for the cache lifetime.
+All arrays use the common element type `T` and dense storage.
 Let `n` be the observation count, `paug` the augmented predictor count, and
 `ns` the retained covariance rank. The intercept is the final design column.
 
@@ -30,10 +31,10 @@ Let `n` be the observation count, `paug` the augmented predictor count, and
 - `paug`: Number of augmented predictors, including the intercept.
 - `ns`: Number of retained covariance modes; may be zero.
 """
-struct FixedCovarianceData{TX,TU,TS,T}
-    Xaug::TX
-    U::TU
-    S::TS
+struct FixedCovarianceData{T}
+    Xaug::Matrix{T}
+    U::Matrix{T}
+    S::Vector{T}
     V::Matrix{T}
     UtX::Matrix{T}
     sqX::Vector{T}
@@ -75,6 +76,22 @@ mutable struct CovarianceState{T}
 end
 
 """
+    CovarianceState{T}(r, s, ns, paug)
+
+Convert variance parameters to `T` and allocate covariance buffers for `ns`
+modes and `paug` augmented predictors. Generation zero marks the derived
+quantities as uninitialized until the first covariance refresh.
+"""
+function CovarianceState{T}(r, s, ns::Integer, paug::Integer) where {T<:AbstractFloat}
+    isconcretetype(T) || throw(ArgumentError("covariance element type must be concrete"))
+    r, s = T(r), T(s)
+    _positive_variance(r,"r")
+    _positive_variance(s,"s")
+    return CovarianceState{T}(r,s,inv(s),zeros(T,ns),zeros(T,ns),zeros(T,ns),
+                              zeros(T,ns,paug),zeros(T,paug),zero(T),UInt(0))
+end
+
+"""
     ResponseState
 
 Single-response projections and covariance-adjusted forms. Projections change
@@ -103,6 +120,19 @@ mutable struct ResponseState{T}
     fx::Vector{T}
     qterm::T
     generation::UInt
+end
+
+"""
+    ResponseState{T}(n, ns, paug)
+
+Allocate response buffers and initialize scalar storage using `T`, for `n`
+observations, `ns` covariance modes and `paug` augmented predictors. Generation
+zero marks the response quantities as uninitialized until the first refresh.
+"""
+function ResponseState{T}(n::Integer, ns::Integer, paug::Integer) where {T<:AbstractFloat}
+    isconcretetype(T) || throw(ArgumentError("response element type must be concrete"))
+    return ResponseState{T}(zeros(T,ns),zeros(T,paug),zero(T),zero(T),zeros(T,ns),
+                            zeros(T,n),zeros(T,paug),zero(T),UInt(0))
 end
 
 """
@@ -162,10 +192,12 @@ end
 # Use log space only outside the safe direct-ratio range. This handles zero
 # modes and avoids overflow in r*S or r*S/s for otherwise finite inputs.
 function _covariance_weights!(d, d2, invden, S, r, s, n)
+    
     _positive_variance(r, "r")
     _positive_variance(s, "s")
     sinv = inv(s)
     cdet = n * log(s)
+    
     for i in eachindex(S)
         t = r * S[i] / s
         if isfinite(t) && (t > 0 || S[i] == 0)
@@ -182,6 +214,7 @@ function _covariance_weights!(d, d2, invden, S, r, s, n)
         d[i] = sqrt(d2[i])
         cdet += ld
     end
+
     return cdet
 end
 
@@ -189,10 +222,12 @@ end
 function _comp_d!(d, S, r, s)
     _positive_variance(r, "r")
     _positive_variance(s, "s")
+    
     for i in eachindex(d, S)
         z = S[i] == 0 ? -Inf : log(r) + log(S[i]) - log(s)
         d[i] = sqrt(logistic(z) / s)
     end
+
     return nothing
 end
 
@@ -201,32 +236,44 @@ end
 function _column_dots_block!(out,A,x,scale_product,scale_previous,lo,hi)
     mul!(view(out,lo:hi), transpose(view(A,:,lo:hi)), x,
         scale_product, scale_previous)
+    
     return nothing
 end
 
 function _column_dots!(out,A,x,scale_product,scale_previous)
+    
     P = size(A,2)
     blocks = cld(P,CACHE_BLOCK_COLUMNS)
+    
     if Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && length(A) >= CACHE_THREAD_WORK
+        # Keep the original array types for mul!: Polyester otherwise wraps
+        # captured arrays in PtrArray, changing matrix-vector dispatch.
+        arrays = (;out,A,x)
         @batch for b in 1:blocks
             lo = (b-1)*CACHE_BLOCK_COLUMNS+1
-            _column_dots_block!(out,A,x,scale_product,scale_previous,lo,min(lo+CACHE_BLOCK_COLUMNS-1,P))
+            _column_dots_block!(arrays.out,arrays.A,arrays.x,scale_product,scale_previous,
+                                lo,min(lo+CACHE_BLOCK_COLUMNS-1,P))
         end
     else
         _column_dots_block!(out,A,x,scale_product,scale_previous,1,P)
     end
+
     return nothing
 end
 
 function _scaled_columns!(covariance, data, lo, hi)
+    
     QX, UtX, d = covariance.QX, data.UtX, covariance.d
+    
     @inbounds for j in lo:hi
         q = zero(eltype(QX))
+        
         @simd for i in axes(QX, 1)
             v = d[i] * UtX[i,j]
             QX[i,j] = v
             q += v*v
         end
+
         g = covariance.sinv * data.sqX[j] - q
         # Avoid catastrophic cancellation when the column is nearly entirely
         # explained by covariance modes with very large variance.
@@ -245,20 +292,25 @@ function _scaled_columns!(covariance, data, lo, hi)
         end
         covariance.gramdiag[j] = g
     end
+
     return nothing
 end
 
 function _refresh_covariance!(sc, r, s)
+    
     covariance, data = sc.covariance, sc.data
     _positive_variance(r, "r")
     _positive_variance(s, "s")
     r, s = convert(typeof(covariance.r), r), convert(typeof(covariance.s), s)
+    
     if covariance.generation != 0 && r == covariance.r && s == covariance.s
         return false
     end
+
     covariance.cdet = _covariance_weights!(covariance.d, covariance.d2, covariance.invden, data.S, r, s, data.n)
     covariance.r, covariance.s, covariance.sinv = r, s, inv(s)
     blocks = cld(data.paug, CACHE_BLOCK_COLUMNS)
+
     if Threads.nthreads() > 1 && data.ns * data.paug >= CACHE_THREAD_WORK
         @batch for b in 1:blocks
             lo = (b-1)*CACHE_BLOCK_COLUMNS + 1
@@ -267,6 +319,7 @@ function _refresh_covariance!(sc, r, s)
     else
         _scaled_columns!(covariance, data, 1, data.paug)
     end
+
     covariance.generation += UInt(1)
     return true
 end
@@ -321,24 +374,31 @@ Construct a cache for fixed Xaug and an orthonormal eigenbasis U. Eigenvalues
 must be finite and nonnegative; an empty basis is supported. No orthogonality
 check is performed in the hot path.
 """
-function makeSCache(ps::ParState2)
-    Xaug, Y, U, S = ps.Xaug, ps.Y, ps.U, ps.S
+function makeSCache(ps::ParState2{T}) where {T}
+   
+    Xaug, Y, U, S = ps.Xaug, ps.Y, ps.U, ps.S 
     n, paug = size(Xaug)
+
     n > 0 && paug > 0 && Y isa AbstractVector && size(U,1) == n && length(Y) == n && size(U,2) == length(S) &&
         length(S) <= n && ps.n == n && ps.p+1 == paug ||
         throw(DimensionMismatch("design, response and eigenbasis dimensions disagree"))
-    all(x -> isfinite(x) && x >= 0, S) || throw(ArgumentError("eigenvalues must be finite and nonnegative"))
+    
+        all(x -> isfinite(x) && x >= 0, S) || throw(ArgumentError("eigenvalues must be finite and nonnegative"))
+    
     _positive_variance(ps.r, "r")
     _positive_variance(ps.s, "s")
-    T = promote_type(float(eltype(Xaug)), float(eltype(Y)), float(eltype(U)), float(eltype(S)), typeof(ps.r), typeof(ps.s))
+
     ns = length(S)
     V = Matrix{T}(undef,n,ns)
+
     for j in 1:ns, i in 1:n
         V[i,j] = U[i,j] * sqrt(S[j])
     end
+
     UtX = Matrix{T}(undef,ns,paug)
     ns > 0 && mul!(UtX, transpose(U), Xaug)
     sqX = zeros(T,paug)
+
     for j in 1:paug
         v = zero(T)
         @inbounds @simd for i in 1:n
@@ -346,13 +406,14 @@ function makeSCache(ps::ParState2)
         end
         sqX[j] = v
     end
+
     data = FixedCovarianceData(Xaug,U,S,V,UtX,sqX,n,paug,ns)
-    covariance = CovarianceState(T(ps.r),T(ps.s),inv(T(ps.s)),zeros(T,ns),zeros(T,ns),zeros(T,ns),
-        zeros(T,ns,paug),zeros(T,paug),zero(T),UInt(0))
-    response = ResponseState(zeros(T,ns),zeros(T,paug),zero(T),zero(T),zeros(T,ns),
-        zeros(T,n),zeros(T,paug),zero(T),UInt(0))
+    covariance = CovarianceState{T}(ps.r,ps.s,ns,paug)
+    response = ResponseState{T}(n,ns,paug)
     sc = SCache(data,covariance,response)
+
     updateSCache!(sc,ps)
+
     return sc
 end
 

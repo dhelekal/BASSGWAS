@@ -56,7 +56,7 @@ end
 Evaluate the collapsed log likelihood for log-determinant `det` and quadratic
 form `ssq`, omitting constants shared by all models.
 """
-@inline (x::TDistLogLik{T})(det::T, ssq::T) where{T} = -0.5 * det - 0.5 * (x.nu+x.n) * log(x.nu*x.lambda + ssq) 
+@inline (x::TDistLogLik{T})(det::T, ssq::T) where{T} = -(one(T)/2) * det - (one(T)/2) * (x.nu+x.n) * log(x.nu*x.lambda + ssq)
 
 """
     ll_plus_a!(ll, det, ssq, a, x::TDistLogLik)
@@ -64,12 +64,12 @@ form `ssq`, omitting constants shared by all models.
 Fill `ll` with the elementwise collapsed Student-t log likelihood for `det`
 and `ssq`, adding the constant `a` to every result.
 """
-function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::TDistLogLik{T}) where{T<:Real} 
+function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::TDistLogLik{T}) where{T<:Real}
     nu=x.nu
     n=x.n
     lambda=x.lambda
     @turbo for i in axes(ll,1)
-        ll[i] = -0.5 * det[i] - 0.5 * (nu+n) * log(nu*lambda + ssq[i]) + a 
+        ll[i] = -(one(T)/2) * det[i] - (one(T)/2) * (nu+n) * log(nu*lambda + ssq[i]) + a
     end
 end
 
@@ -87,7 +87,7 @@ struct StdNormLogLik{T<:Real} <: Aloglik end
 Evaluate the standard-normal log likelihood for log-determinant `det` and
 quadratic form `ssq`, omitting constants shared by all models.
 """
-(x::StdNormLogLik{T})(det::T, ssq::T) where{T} = -0.5 * det - 0.5 * ssq 
+(x::StdNormLogLik{T})(det::T, ssq::T) where{T} = -(one(T)/2) * det - (one(T)/2) * ssq
 
 """
     ll_plus_a!(ll, det, ssq, a, x::StdNormLogLik)
@@ -95,8 +95,8 @@ quadratic form `ssq`, omitting constants shared by all models.
 Fill `ll` with the elementwise standard-normal log likelihood for `det` and
 `ssq`, adding the constant `a` to every result.
 """
-function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::StdNormLogLik{T}) where{T<:Real} 
+function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::StdNormLogLik{T}) where{T<:Real}
     @turbo for i in axes(ll,1)
-        ll[i] = -0.5 * det[i] - 0.5 * ssq[i] + a 
+        ll[i] = -(one(T)/2) * det[i] - (one(T)/2) * ssq[i] + a
     end
 end

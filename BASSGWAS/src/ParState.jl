@@ -16,6 +16,8 @@
     ParState2
 
 Mutable model parameters and data shared by the sampler's numerical caches.
+All numerical arrays and continuous parameters use the concrete floating-point
+type `T`; counts use `Int`. Matching dense inputs are shared with the caller.
 
 # Fields
 - `Xaug`: Predictor matrix with an intercept column appended last.
@@ -28,36 +30,82 @@ Mutable model parameters and data shared by the sampler's numerical caches.
 - `s`: Residual variance multiplier.
 - `mc`: Intercept variance.
 """
-mutable struct ParState2{Tx, Ty, Tv, Tn, Tr}
-    Xaug::Tx
-    Y::Ty
-    U::Tx
-    S::Tv
-    p::Tn
-    n::Tn
-    alpha::Tr
-    beta::Tr
-    c::Tr
-    r::Tr
-    s::Tr
-    mc::Tr
+mutable struct ParState2{T<:AbstractFloat}
+    Xaug::Matrix{T}
+    Y::Vector{T}
+    U::Matrix{T}
+    S::Vector{T}
+    p::Int
+    n::Int
+    alpha::T
+    beta::T
+    c::T
+    r::T
+    s::T
+    mc::T
+
+    function ParState2{T}(Xaug, Y, U, S, p::Integer, n::Integer,
+                          alpha, beta, c, r, s, mc) where {T<:AbstractFloat}
+        isconcretetype(T) || throw(ArgumentError("state element type must be concrete"))
+        Xaug, Y = convert(Matrix{T}, Xaug), convert(Vector{T}, Y)
+        U, S = convert(Matrix{T}, U), convert(Vector{T}, S)
+        alpha, beta, c, r, s, mc = T.((alpha, beta, c, r, s, mc))
+        n > 0 && p >= 0 && size(Xaug) == (n,p+1) && length(Y) == n &&
+            size(U) == (n,length(S)) && length(S) <= n ||
+            throw(DimensionMismatch("design, response, eigenbasis and counts must agree"))
+        all(isfinite,Xaug) && all(isfinite,Y) && all(isfinite,U) ||
+            throw(ArgumentError("design, response and eigenvectors must be finite"))
+        all(x -> isfinite(x) && x >= 0,S) ||
+            throw(ArgumentError("eigenvalues must be finite and nonnegative"))
+        for (name,value) in (("alpha",alpha),("beta",beta),("c",c),("r",r),("s",s),("mc",mc))
+            isfinite(value) && value > 0 || throw(ArgumentError("$name must be finite and positive"))
+        end
+        return new{T}(Xaug,Y,U,S,p,n,alpha,beta,c,r,s,mc)
+    end
+end
+
+# Promote first so integer inputs do not unnecessarily widen floating inputs.
+function _state_float_type(types...)
+    T = float(promote_type(types...))
+    T <: AbstractFloat && isconcretetype(T) ||
+        throw(ArgumentError("state inputs must promote to a concrete floating-point type"))
+    return T
 end
 
 """
     ParState2(X, Y, U, S, alpha, beta, c, r, s, mc)
+    ParState2{T}(X, Y, U, S, alpha, beta, c, r, s, mc)
 
 Construct sampler parameters and append a column of ones to `X` for the
 intercept.
 
 `X` has one row per observation, `Y` has one element per observation, and the
-rows of `U` correspond to the same observations. The scalar hyperparameters
-must share, or promote compatibly to, a common storage type.
+rows of `U` correspond to the same observations. Infer `T` from all array
+element types and scalar parameters, or select it explicitly. Inputs are
+converted to dense storage once; already matching `Y`, `U` and `S` are shared.
 """
-function ParState2(X, Y, U, S, alpha, beta, c, r, s, mc)
-    alpha, beta, c, r, s = promote(alpha, beta, c, r, s, mc)
-    p = size(X, 2)    
-    n = size(Y, 1)
+function ParState2(X::AbstractMatrix{<:Real}, Y::AbstractVector{<:Real},
+                   U::AbstractMatrix{<:Real}, S::AbstractVector{<:Real},
+                   alpha::Real, beta::Real, c::Real, r::Real, s::Real, mc::Real)
+    T = _state_float_type(eltype(X),eltype(Y),eltype(U),eltype(S),
+                         typeof(alpha),typeof(beta),typeof(c),typeof(r),typeof(s),typeof(mc))
+    return ParState2{T}(X,Y,U,S,alpha,beta,c,r,s,mc)
+end
 
-    Xaug = [X ones(n)]
-    return ParState2(Xaug, Y, U, S, p, n, alpha, beta, c, r, s, mc)
+function ParState2{T}(X::AbstractMatrix{<:Real}, Y::AbstractVector{<:Real},
+                      U::AbstractMatrix{<:Real}, S::AbstractVector{<:Real},
+                      alpha::Real, beta::Real, c::Real, r::Real, s::Real, mc::Real) where {T<:AbstractFloat}
+    isconcretetype(T) || throw(ArgumentError("state element type must be concrete"))
+    n, p = size(X)
+    Xaug = Matrix{T}(undef,n,p+1)
+    copyto!(view(Xaug,:,1:p),X)
+    fill!(view(Xaug,:,p+1),one(T))
+    return ParState2{T}(Xaug,Y,U,S,p,n,alpha,beta,c,r,s,mc)
+end
+
+# Preserve the constructor for an already augmented design.
+function ParState2(Xaug, Y, U, S, p::Integer, n::Integer, alpha, beta, c, r, s, mc)
+    T = _state_float_type(eltype(Xaug),eltype(Y),eltype(U),eltype(S),
+                         typeof(alpha),typeof(beta),typeof(c),typeof(r),typeof(s),typeof(mc))
+    return ParState2{T}(Xaug,Y,U,S,p,n,alpha,beta,c,r,s,mc)
 end

@@ -10,6 +10,15 @@ julia --project=. --startup-file=no --threads=4 test/runtests.jl
 The enclosing testset allows all groups to run
 even if a regression fails. No checks are marked broken or skipped.
 
+## Floating-point state storage
+
+`state_type_tests.jl` checks `ParState2{Float64}` and `wTGSState2{Float64}`
+construction from mixed integer, rational and Float64 inputs, explicit type
+selection, dense conversion of views, shared cache inputs, and invalid shapes
+and parameter values. Complete Float64 sampler transitions exercise both
+sampled and fixed coefficient-prior variance and all adaptation stages.
+Float32 numerical validation is intentionally deferred.
+
 ## Independent numerical references
 
 `numerical_helpers.jl` enumerates every inclusion vector for one to four
