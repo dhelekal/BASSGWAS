@@ -106,16 +106,15 @@ Initialize a weighted-TGS model state and its predictor-toggle cache.
 
 `γ0` is an integer or Boolean binary vector with one entry per predictor and
 is copied into `Vector{Int}`. Numerical storage uses the parameter state's
-floating-point type, which must match the cache. The method evaluates the
+floating-point type, which must match the cache and likelihood. The method evaluates the
 current collapsed likelihood, every one-predictor alternative, and the initial
 move intensities. It returns `(state, qcache)`.
 """
-function init_state2(loglik::Aloglik, ps::ParState2{T}, scache,
-                     γ0::AbstractVector{<:Integer}; eps = 5.0, xi_init = 1.0) where {T}
+function init_state2(loglik::Aloglik{T}, ps::ParState2{T}, scache::SCache{D,T},
+                     γ0::AbstractVector{<:Integer}; eps = 5.0, xi_init = 1.0) where {D,T}
     p = length(γ0)
     p == ps.p || throw(DimensionMismatch("inclusion vector must match predictor count"))
     all(x -> x == 0 || x == 1,γ0) || throw(ArgumentError("inclusion values must be zero or one"))
-    eltype(scache.response.fx) === T || throw(ArgumentError("parameter and cache precision must match"))
     eps, xi_init = T(eps), T(xi_init)
     isfinite(eps) && eps >= 0 || throw(ArgumentError("eps must be finite and nonnegative"))
     isfinite(xi_init) && xi_init >= 0 || throw(ArgumentError("xi_init must be finite and nonnegative"))
@@ -142,7 +141,7 @@ function init_state2(loglik::Aloglik, ps::ParState2{T}, scache,
     qcache = QCache(ps, idx1_icept, idx0)
 
     det_curr, ssq_curr = comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
-    ll_curr = T(loglik(det_curr, ssq_curr))
+    ll_curr = loglik(det_curr, ssq_curr)
 
     comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta)
     comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
@@ -163,7 +162,8 @@ intensities after model or continuous-parameter changes.
 
 Cached arrays in `state` and the active numerical workspace in `qcache` are updated in place.
 """
-function update_state2!(state, ps, scache, qcache, loglik::Aloglik)
+function update_state2!(state::wTGSState2{T}, ps::ParState2{T}, scache::SCache{D,T},
+                        qcache::QCache{T}, loglik::Aloglik{T}) where {D,T}
 
     @unpack p, γ, dets, ssq, llrs, pips, conds, rates, rsums, xi, eps = state
 
@@ -213,7 +213,8 @@ low-rank covariance and active-design caches.
 The intercept is always included with variance `ps.mc`; active predictor
 effects use variance `ps.c`.
 """
-function comp_ll2(scache, qcache, ps, γ, loglik::Aloglik)
+function comp_ll2(scache::SCache{D,T}, qcache::QCache{T}, ps::ParState2{T},
+                  γ, loglik::Aloglik{T}) where {D,T}
     ps.s == scache.covariance.s || throw(ArgumentError("refresh SCache after changing s"))
     work = prepare_active!(qcache,scache,ps.c,ps.mc)
     return loglik(work.det,work.ssq)
@@ -297,9 +298,9 @@ current model.
 The calculation combines collapsed likelihood differences with the
 Beta-Binomial prior ratio implied by `alpha` and `beta`.
 """
-function comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta)
+function comp_llrs!(llrs::AbstractVector{T}, dets::AbstractVector{T}, ssq::AbstractVector{T},
+                    ll_curr::T, idx1, idx0, p, loglik::Aloglik{T}, alpha, beta) where {T}
     p == 0 && return nothing
-    T = eltype(llrs)
     γ = length(idx1)
     prior_curr = _inc_prior(γ, p, alpha, beta)
     # Compute prior changes for adding or removing one included predictor.
@@ -345,7 +346,8 @@ This test-only reference implementation mutates `state` and is used to verify
 the cached Woodbury and rank-one update path. It returns `logabsdet(C)` for the
 explicit covariance matrix.
 """
-function _update_state_test!(state, ps, scache, qcache, loglik::Aloglik; eps=5.0)
+function _update_state_test!(state::wTGSState2{T}, ps::ParState2{T}, scache::SCache{D,T},
+                             qcache::QCache{T}, loglik::Aloglik{T}; eps=5.0) where {D,T}
 
     @unpack p, γ, dets, ssq, llrs, pips, conds, rates, rsums = state
 

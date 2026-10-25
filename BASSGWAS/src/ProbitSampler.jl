@@ -104,7 +104,7 @@ function ProbitBVSSampler(X::AbstractMatrix{<:Real}, Y::AbstractVector{<:Integer
     shape = nu/T(2)
     scale = shape * lambda
 
-    loglik = TDistLogLik(nu, lambda, n)
+    loglik = TDistLogLik{T}(nu, lambda, n)
 
     # Initialize latent liabilities on the side of zero fixed by each binary outcome.
     signs = ifelse.(Y .> 0,one(T),-one(T))

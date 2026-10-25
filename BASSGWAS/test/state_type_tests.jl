@@ -3,6 +3,34 @@
 
 include("numerical_helpers.jl")
 
+@testset "Likelihood precision contract" begin
+    ps = numerical_fixture(2)
+    sc = BASSGWAS.makeSCache(ps)
+    gamma = [0,1]
+    for ll in (BASSGWAS.StdNormLogLik{Float64}(),BASSGWAS.TDistLogLik(3,2,ps.n))
+        @test ll isa BASSGWAS.Aloglik{Float64}
+        @test (@inferred ll(1.2,3.4)) isa Float64
+        dets, ssq = [1.2,2.3], [3.4,4.5]
+        values = zeros(2)
+        BASSGWAS.ll_plus_a!(values,dets,ssq,0.7,ll)
+        @test values ≈ [ll(dets[i],ssq[i])+0.7 for i in eachindex(values)]
+        state,qc = BASSGWAS.init_state2(ll,ps,sc,gamma)
+        @test state.ll_curr isa Float64
+        @test (@inferred BASSGWAS.comp_ll2(sc,qc,ps,gamma,ll)) isa Float64
+        BASSGWAS.update_state2!(state,ps,sc,qc,ll)
+        @test state.ll_curr ≈ BASSGWAS.comp_ll2(sc,qc,ps,gamma,ll)
+        # Mismatched precision is rejected by dispatch, before any mutation.
+        other_precision = BASSGWAS.StdNormLogLik{BigFloat}()
+        @test !applicable(BASSGWAS.init_state2,other_precision,ps,sc,gamma)
+        @test !applicable(BASSGWAS.update_state2!,state,ps,sc,qc,other_precision)
+        @test !applicable(BASSGWAS.comp_ll2,sc,qc,ps,gamma,other_precision)
+    end
+    ll = @inferred BASSGWAS.TDistLogLik(3,2,8)
+    @test (ll.nu,ll.lambda,ll.n) === (3.0,2.0,8.0)
+    @test_throws TypeError BASSGWAS.StdNormLogLik{Int}()
+    @test_throws TypeError BASSGWAS.TDistLogLik{Int}(3,2,8)
+end
+
 @testset "Typed covariance and response construction" begin
     for ns in (0,2)
         covariance = @inferred BASSGWAS.CovarianceState{Float64}(2,3//2,ns,4)

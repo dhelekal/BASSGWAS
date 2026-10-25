@@ -99,11 +99,14 @@ function _reserve_active!(qc, needed)
     xdata = zeros(T,size(qc.xdata,1),allocated_model_size)
     xtxdata = zeros(T,allocated_model_size,size(qc.xtxdata,2))
     covdata = similar(xtxdata)
+
     copyto!(view(xdata,:,1:qc.d),get_X1(qc))
     copyto!(view(xtxdata,1:qc.d,:),get_XtX(qc))
     copyto!(view(covdata,1:qc.d,:),view(qc.covdata,1:qc.d,:))
+
     resize!(qc.validrows,allocated_model_size)
     fill!(view(qc.validrows,(qc.d+1):allocated_model_size),false)
+    
     qc.xdata, qc.xtxdata, qc.covdata = xdata,xtxdata,covdata
     qc.work = ActiveWorkspace(T,size(xdata,1),size(qc.work.qactive,1),allocated_model_size)
     return nothing
@@ -161,6 +164,6 @@ function remove_active_QC(qc, ps, index, i1_set_new, i0_set_new)
     qc.d, qc.p = old-1,length(i0_set_new)
     qc.i1_set, qc.i0_set = i1_set_new,i0_set_new
     qc.generation += UInt(1)
-    
+
     return nothing
 end
