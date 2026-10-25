@@ -233,36 +233,28 @@ end
 
 # Column dots are memory-bound for large predictor sets. Each worker reads
 # contiguous columns and owns disjoint outputs, including strided active rows.
-function _column_dots_block!(out,A,x,scale_product,scale_previous,lo,hi)
+function _column_dots_block!(data,lo,hi)
+    (;out,A,x,scale_product,scale_previous) = data
     mul!(view(out,lo:hi), transpose(view(A,:,lo:hi)), x,
         scale_product, scale_previous)
     
-    return nothing
+    return 0
 end
 
 function _column_dots!(out,A,x,scale_product,scale_previous)
     
     P = size(A,2)
-    blocks = cld(P,CACHE_BLOCK_COLUMNS)
-    
-    if Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && length(A) >= CACHE_THREAD_WORK
-        # Keep the original array types for mul!: Polyester otherwise wraps
-        # captured arrays in PtrArray, changing matrix-vector dispatch.
-        arrays = (;out,A,x)
-        @batch for b in 1:blocks
-            lo = (b-1)*CACHE_BLOCK_COLUMNS+1
-            _column_dots_block!(arrays.out,arrays.A,arrays.x,scale_product,scale_previous,
-                                lo,min(lo+CACHE_BLOCK_COLUMNS-1,P))
-        end
-    else
-        _column_dots_block!(out,A,x,scale_product,scale_previous,1,P)
-    end
+   
+    threaded = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && length(A) >= CACHE_THREAD_WORK
+    foreach_block!(_column_dots_block!, (;out,A,x,scale_product,scale_previous), P;
+        blocksize=threaded ? CACHE_BLOCK_COLUMNS : max(P,1),
+        workers=threaded ? Threads.nthreads() : 1)
 
     return nothing
 end
 
-function _scaled_columns!(covariance, data, lo, hi)
-    
+function _scaled_columns!(context, lo, hi)
+    (;covariance,data) = context
     QX, UtX, d = covariance.QX, data.UtX, covariance.d
     
     @inbounds for j in lo:hi
@@ -293,7 +285,7 @@ function _scaled_columns!(covariance, data, lo, hi)
         covariance.gramdiag[j] = g
     end
 
-    return nothing
+    return 0
 end
 
 function _refresh_covariance!(sc, r, s)
@@ -309,16 +301,11 @@ function _refresh_covariance!(sc, r, s)
 
     covariance.cdet = _covariance_weights!(covariance.d, covariance.d2, covariance.invden, data.S, r, s, data.n)
     covariance.r, covariance.s, covariance.sinv = r, s, inv(s)
-    blocks = cld(data.paug, CACHE_BLOCK_COLUMNS)
-
-    if Threads.nthreads() > 1 && data.ns * data.paug >= CACHE_THREAD_WORK
-        @batch for b in 1:blocks
-            lo = (b-1)*CACHE_BLOCK_COLUMNS + 1
-            _scaled_columns!(covariance, data, lo, min(lo+CACHE_BLOCK_COLUMNS-1, data.paug))
-        end
-    else
-        _scaled_columns!(covariance, data, 1, data.paug)
-    end
+    
+    threaded = Threads.nthreads() > 1 && data.ns * data.paug >= CACHE_THREAD_WORK
+    foreach_block!(_scaled_columns!, (;covariance,data), data.paug;
+        blocksize=threaded ? CACHE_BLOCK_COLUMNS : max(data.paug,1),
+        workers=threaded ? Threads.nthreads() : 1)
 
     covariance.generation += UInt(1)
     return true

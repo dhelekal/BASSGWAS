@@ -272,12 +272,38 @@ end
 end
 
 @testset "Candidate failures return to the caller" begin
-    ps,sc,state,qc,ll = workspace_fixture(4096;a=20)
-    index = ps.p
-    previous = sc.covariance.gramdiag[index]
-    sc.covariance.gramdiag[index] = -1e100
-    @test_throws PosDefException BASSGWAS.update_state2!(state,ps,sc,qc,ll)
-    sc.covariance.gramdiag[index] = previous
-    BASSGWAS.update_state2!(state,ps,sc,qc,ll)
-    @test all(isfinite,state.dets) && all(isfinite,state.ssq)
+    original_threads = BLAS.get_num_threads()
+    try
+        for blas_threads in (1,2)
+            BLAS.set_num_threads(blas_threads)
+            ps,sc,state,qc,ll = workspace_fixture(4099;a=20)
+            expected_dets,expected_ssq = copy(state.dets),copy(state.ssq)
+            previous = copy(sc.covariance.gramdiag)
+            nb = cld(ps.p,BASSGWAS.CACHE_BLOCK_COLUMNS)
+            nw = blas_threads == 1 ? min(Threads.nthreads(),nb) : 1
+            starts = [fld((worker-1)*nb,nw)*BASSGWAS.CACHE_BLOCK_COLUMNS+1 for worker in 1:nw]
+            indices = unique([starts;ps.p])
+            # Fail each worker separately, the partial final block, then several
+            # workers together. The earliest failing candidate must be reported.
+            for failures in [([index] for index in indices)...,indices]
+                sc.covariance.gramdiag[failures] .= -1e100
+                err = try
+                    BASSGWAS.update_state2!(state,ps,sc,qc,ll)
+                    nothing
+                catch exception
+                    exception
+                end
+                @test err isa PosDefException
+                if err isa PosDefException
+                    @test err.info == minimum(failures)
+                end
+                copyto!(sc.covariance.gramdiag,previous)
+                BASSGWAS.update_state2!(state,ps,sc,qc,ll)
+                @test isapprox(state.dets,expected_dets;rtol=NUM_RTOL,atol=NUM_ATOL)
+                @test isapprox(state.ssq,expected_ssq;rtol=NUM_RTOL,atol=NUM_ATOL)
+            end
+        end
+    finally
+        BLAS.set_num_threads(original_threads)
+    end
 end

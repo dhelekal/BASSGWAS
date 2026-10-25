@@ -10,6 +10,16 @@ julia --project=. --startup-file=no --threads=4 test/runtests.jl
 The enclosing testset allows all groups to run
 even if a regression fails. No checks are marked broken or skipped.
 
+## Block task execution
+
+`block_tasks_tests.jl` checks contiguous, exactly-once block coverage, partial
+blocks, worker-owned scratch, deterministic failure selection and per-worker
+stopping. It also checks independent concurrent runners, preserved matrix and
+view types for BLAS dispatch, argument validation, and status allocations
+bounded by worker count. A three-thread run exercises uneven partitions.
+Candidate failure tests in `workspace_tests.jl` cover different worker ranges,
+multiple failures, and recovery with single- and multi-threaded BLAS settings.
+
 ## Floating-point state storage
 
 `state_type_tests.jl` checks `ParState2{Float64}` and `wTGSState2{Float64}`

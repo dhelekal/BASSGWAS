@@ -244,6 +244,20 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
 end
 
 
+function _rates_block!(data, lo, hi)
+    (;rates,conds,pips,llrs,w) = data
+    @turbo for k in lo:hi
+        llr = llrs[k]
+        cprob = logistic(-llr)
+        pip = logistic(llr)
+
+        conds[k] = cprob
+        pips[k] = pip
+        rates[k] = 0.5*(pip+w)/cprob
+    end
+    return 0
+end
+
 """
     comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
 
@@ -260,21 +274,8 @@ function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
     w = eps/p
 
     nt = Threads.nthreads()
-    blck_sz = ceil(Int64,p/nt)
-
-    @batch for i in 1:blck_sz:p
-        j = min(i+blck_sz-1,p)
-        sp = i:j
-        @turbo for k in sp
-            llr = llrs[k]
-            cprob = logistic(-llr)
-            pip = logistic(llr)
-
-            conds[k] = cprob
-            pips[k] = pip
-            rates[k] = 0.5*(pip+w)/cprob
-        end
-    end
+    foreach_block!(_rates_block!, (;rates,conds,pips,llrs,w), p;
+        blocksize=cld(p,nt),workers=nt)
 
     for i in idx1
         llr = llrs[i]
@@ -287,6 +288,12 @@ function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
     end
 
     nothing
+end
+
+function _llrs_block!(data, lo, hi)
+    (;llrs,dets,ssq,offset,loglik) = data
+    @views ll_plus_a!(llrs[lo:hi],dets[lo:hi],ssq[lo:hi],offset,loglik)
+    return 0
 end
 
 """
@@ -309,12 +316,8 @@ function comp_llrs!(llrs::AbstractVector{T}, dets::AbstractVector{T}, ssq::Abstr
 
     n=size(llrs,1)
     nt = Threads.nthreads()
-    blck_sz = ceil(Int64,n/nt)
-    @batch for i in 1:blck_sz:n
-        j = min(i+blck_sz-1,n)
-        sp = i:j
-        @views ll_plus_a!(llrs[sp], dets[sp], ssq[sp], lpr_incl-ll_curr, loglik)
-    end
+    foreach_block!(_llrs_block!, (;llrs,dets,ssq,offset=lpr_incl-ll_curr,loglik), n;
+        blocksize=max(cld(n,nt),1),workers=nt)
 
     for i in idx1
         llrs[i] += lpr_excl-lpr_incl

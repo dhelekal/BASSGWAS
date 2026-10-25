@@ -108,9 +108,6 @@ portions contain the current model's quantities.
   entries for predictor-removal updates.
 - `blocks`: One `allocated_model_size × CACHE_BLOCK_COLUMNS` matrix per worker for
   candidate cross-products and their in-place lower-triangular solves.
-- `invalid_candidates`: One failure slot per worker: zero on success, or the
-  index of a candidate with a nonpositive Schur complement. Failures are
-  raised on the calling task after workers finish.
 - `factor_key`: Tuple `(model_generation, covariance_generation, c, mc)`
   identifying the accepted factor. Invalid keys use `typemax(UInt)` counters
   and `NaN` variances.
@@ -131,7 +128,6 @@ mutable struct ActiveWorkspace{T}
     beta::Vector{T}
     invdiag::Vector{T}
     blocks::Vector{Matrix{T}}
-    invalid_candidates::Vector{Int}
     factor_key::Tuple{UInt,UInt,T,T}
     response_generation::UInt
     det::T
@@ -141,14 +137,15 @@ end
 
 function ActiveWorkspace(::Type{T}, n, k, a) where T
     ActiveWorkspace(zeros(T,k,a),zeros(T,a,a),zeros(T,a,a),zeros(T,a),zeros(T,a),zeros(T,a),
-        [zeros(T,a,CACHE_BLOCK_COLUMNS) for _ in 1:Threads.nthreads()], zeros(Int,Threads.nthreads()),
+        [zeros(T,a,CACHE_BLOCK_COLUMNS) for _ in 1:Threads.nthreads()],
         (typemax(UInt),typemax(UInt),T(NaN),T(NaN)),typemax(UInt),zero(T),zero(T),
         ProposalWorkspace(T,n,k,a))
 end
 
 # Numerical kernels use strided, contiguous-column views of reserved storage.
 # Index-vector gathers are copied into those buffers once per model.
-function _active_product_block!(qc, sc, lo, hi)
+function _active_product_block!(data, lo, hi)
+    (;qc,sc) = data
     d = qc.d
     covdata = view(qc.covdata,1:d,lo:hi)
     copyto!(covdata, view(qc.xtxdata,1:d,lo:hi))
@@ -160,7 +157,7 @@ function _active_product_block!(qc, sc, lo, hi)
         covdata .*= sc.covariance.sinv
     end
 
-    return nothing
+    return 0
 end
 
 """Synchronize G = X_active' C^-1 X, preserving valid rows across model flips."""
@@ -174,15 +171,10 @@ function sync_active_products!(qc, sc)
             qc.work.qactive[i,j] = sc.QX[i,qc.i1_set[j]]
         end
 
-        nb = cld(paug,CACHE_BLOCK_COLUMNS)
-        if Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && sc.ns*qc.d*paug >= CACHE_THREAD_WORK
-            @batch for b in 1:nb
-                lo = (b-1)*CACHE_BLOCK_COLUMNS+1
-                _active_product_block!(qc,sc,lo,min(lo+CACHE_BLOCK_COLUMNS-1,paug))
-            end
-        else
-            _active_product_block!(qc,sc,1,paug)
-        end
+        threaded = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && sc.ns*qc.d*paug >= CACHE_THREAD_WORK
+        foreach_block!(_active_product_block!, (;qc,sc), paug;
+            blocksize=threaded ? CACHE_BLOCK_COLUMNS : max(paug,1),
+            workers=threaded ? Threads.nthreads() : 1)
 
         fill!(qc.validrows,true)
         qc.cov_generation = covariance.generation
@@ -267,7 +259,8 @@ function prepare_active!(qc, sc, c, mc)
     return work
 end
 
-function _candidate_block!(dets,ssq,qc,sc,c,lo,hi,buffer)
+function _candidate_block!(data,lo,hi)
+    (;dets,ssq,qc,sc,c,buffer) = data
     work, d = qc.work, qc.d
     block = view(buffer,1:d,1:(hi-lo+1))
     copyto!(block,view(qc.covdata,1:d,lo:hi))
@@ -292,38 +285,19 @@ function _candidate_block!(dets,ssq,qc,sc,c,lo,hi,buffer)
     return 0
 end
 
-function candidate_terms!(dets,ssq,qc,sc,c)
-    p, work = length(dets), qc.work
-    nb = cld(p,CACHE_BLOCK_COLUMNS)
-    fill!(work.invalid_candidates,0)
-    # Each worker owns one buffer, independent of task migration/thread IDs.
-    nt = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && qc.d*p >= CACHE_THREAD_WORK ? min(length(work.blocks),nb) : 1
-    
-    if nt > 1
-        @batch for worker in 1:nt
-            # Balance contiguous block ranges across workers.
-            first_block = fld((worker-1)*nb,nt) + 1
-            last_block = fld(worker*nb,nt)
-            for b in first_block:last_block
-                lo = (b-1)*CACHE_BLOCK_COLUMNS+1
-                bad = _candidate_block!(dets,ssq,qc,sc,c,lo,min(lo+CACHE_BLOCK_COLUMNS-1,p),work.blocks[worker])
-                if bad != 0
-                    work.invalid_candidates[worker] = bad
-                    break
-                end
-            end
-        end
-    else
-        for b in 1:nb
-            lo = (b-1)*CACHE_BLOCK_COLUMNS+1
-            bad = _candidate_block!(dets,ssq,qc,sc,c,lo,min(lo+CACHE_BLOCK_COLUMNS-1,p),work.blocks[1])
-            bad == 0 || throw(PosDefException(bad))
-        end
-    end
+function _candidate_worker_data(data, worker)
+    # Scratch belongs to logical workers, independent of task migration/thread IDs.
+    return (;data...,buffer=data.qc.work.blocks[worker])
+end
 
-    for bad in work.invalid_candidates
-        bad == 0 || throw(PosDefException(bad))
-    end
+function candidate_terms!(dets,ssq,qc,sc,c)
+    p = length(dets)
+    threaded = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && qc.d*p >= CACHE_THREAD_WORK
+    bad = foreach_block!(_candidate_block!, (;dets,ssq,qc,sc,c), p;
+        blocksize=CACHE_BLOCK_COLUMNS,
+        workers=threaded ? length(qc.work.blocks) : 1,
+        worker_data=_candidate_worker_data)
+    bad == 0 || throw(PosDefException(bad))
 
     return nothing
 end
