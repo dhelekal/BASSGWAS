@@ -82,13 +82,15 @@ Convert variance parameters to `T` and allocate covariance buffers for `ns`
 modes and `paug` augmented predictors. Generation zero marks the derived
 quantities as uninitialized until the first covariance refresh.
 """
-function CovarianceState{T}(r, s, ns::Integer, paug::Integer) where {T<:AbstractFloat}
+function CovarianceState{T}(r, s, ns::Integer, paug::Integer) where {T <: AbstractFloat}
     isconcretetype(T) || throw(ArgumentError("covariance element type must be concrete"))
     r, s = T(r), T(s)
-    _positive_variance(r,"r")
-    _positive_variance(s,"s")
-    return CovarianceState{T}(r,s,inv(s),zeros(T,ns),zeros(T,ns),zeros(T,ns),
-                              zeros(T,ns,paug),zeros(T,paug),zero(T),UInt(0))
+    _positive_variance(r, "r")
+    _positive_variance(s, "s")
+    return CovarianceState{T}(
+        r, s, inv(s), zeros(T, ns), zeros(T, ns), zeros(T, ns),
+        zeros(T, ns, paug), zeros(T, paug), zero(T), UInt(0)
+    )
 end
 
 """
@@ -129,10 +131,12 @@ Allocate response buffers and initialize scalar storage using `T`, for `n`
 observations, `ns` covariance modes and `paug` augmented predictors. Generation
 zero marks the response quantities as uninitialized until the first refresh.
 """
-function ResponseState{T}(n::Integer, ns::Integer, paug::Integer) where {T<:AbstractFloat}
+function ResponseState{T}(n::Integer, ns::Integer, paug::Integer) where {T <: AbstractFloat}
     isconcretetype(T) || throw(ArgumentError("response element type must be concrete"))
-    return ResponseState{T}(zeros(T,ns),zeros(T,paug),zero(T),zero(T),zeros(T,ns),
-                            zeros(T,n),zeros(T,paug),zero(T),UInt(0))
+    return ResponseState{T}(
+        zeros(T, ns), zeros(T, paug), zero(T), zero(T), zeros(T, ns),
+        zeros(T, n), zeros(T, paug), zero(T), UInt(0)
+    )
 end
 
 """
@@ -157,15 +161,17 @@ properties are transpose views of ordinary vectors.
 - `response`: `ResponseState` containing current response projections,
   adjusted forms, reusable buffers and the response generation counter.
 """
-struct SCache{D,T}
+struct SCache{D, T}
     data::D
     covariance::CovarianceState{T}
     response::ResponseState{T}
 end
 
-Base.propertynames(::SCache, private::Bool=false) =
-    (:data, :covariance, :response, :S, :U, :V, :UtX, :sqX, :n, :paug, :ns,
-     :d, :QX, :cdet, :YtU, :YtX, :FX, :qterm)
+Base.propertynames(::SCache, private::Bool = false) =
+    (
+    :data, :covariance, :response, :S, :U, :V, :UtX, :sqX, :n, :paug, :ns,
+    :d, :QX, :cdet, :YtU, :YtX, :FX, :qterm,
+)
 
 @inline function Base.getproperty(sc::SCache, name::Symbol)
     if name in (:S, :U, :V, :UtX, :sqX, :n, :paug, :ns)
@@ -187,12 +193,12 @@ end
 # Use log space only outside the safe direct-ratio range. This handles zero
 # modes and avoids overflow in r*S or r*S/s for otherwise finite inputs.
 function _covariance_weights!(d, d2, invden, S, r, s, n)
-    
+
     _positive_variance(r, "r")
     _positive_variance(s, "s")
     sinv = inv(s)
     cdet = n * log(s)
-    
+
     for i in eachindex(S)
         t = r * S[i] / s
         if isfinite(t) && (t > 0 || S[i] == 0)
@@ -217,7 +223,7 @@ end
 function _comp_d!(d, S, r, s)
     _positive_variance(r, "r")
     _positive_variance(s, "s")
-    
+
     for i in eachindex(d, S)
         z = S[i] == 0 ? -Inf : log(r) + log(S[i]) - log(s)
         d[i] = sqrt(logistic(z) / s)
@@ -227,16 +233,16 @@ function _comp_d!(d, S, r, s)
 end
 
 function _scaled_columns!(context, lo, hi, worker)
-    (;covariance,data) = context
+    (; covariance, data) = context
     QX, UtX, d = covariance.QX, data.UtX, covariance.d
-    
+
     @inbounds for j in lo:hi
         q = zero(eltype(QX))
-        
+
         @simd for i in axes(QX, 1)
-            v = d[i] * UtX[i,j]
-            QX[i,j] = v
-            q += v*v
+            v = d[i] * UtX[i, j]
+            QX[i, j] = v
+            q += v * v
         end
 
         g = covariance.sinv * data.sqX[j] - q
@@ -244,17 +250,17 @@ function _scaled_columns!(context, lo, hi, worker)
         # explained by covariance modes with very large variance.
         if g <= 64eps(eltype(QX)) * covariance.sinv * data.sqX[j]
             g = zero(g)
-            
+
             for row in axes(data.Xaug, 1)
-                v = data.Xaug[row,j]
+                v = data.Xaug[row, j]
                 for i in axes(UtX, 1)
-                    v -= data.U[row,i] * UtX[i,j]
+                    v -= data.U[row, i] * UtX[i, j]
                 end
-                g += covariance.sinv * v*v
+                g += covariance.sinv * v * v
             end
 
             for i in axes(UtX, 1)
-                g += covariance.invden[i] * UtX[i,j]^2
+                g += covariance.invden[i] * UtX[i, j]^2
             end
         end
         covariance.gramdiag[j] = g
@@ -265,23 +271,25 @@ end
 
 # Refresh covariance shur complement terms
 function _refresh_covariance!(sc, r, s)
-    
+
     covariance, data = sc.covariance, sc.data
     _positive_variance(r, "r")
     _positive_variance(s, "s")
     r, s = convert(typeof(covariance.r), r), convert(typeof(covariance.s), s)
-    
+
     if covariance.generation != 0 && r == covariance.r && s == covariance.s
         return false
     end
 
     covariance.cdet = _covariance_weights!(covariance.d, covariance.d2, covariance.invden, data.S, r, s, data.n)
     covariance.r, covariance.s, covariance.sinv = r, s, inv(s)
-    
+
     threaded = Threads.nthreads() > 1 && data.ns * data.paug >= CACHE_THREAD_WORK
-    foreach_block!(_scaled_columns!, (;covariance,data), data.paug;
-        blocksize=threaded ? CACHE_BLOCK_COLUMNS : max(data.paug,1),
-        workers=threaded ? Threads.nthreads() : 1)
+    foreach_block!(
+        _scaled_columns!, (; covariance, data), data.paug;
+        blocksize = threaded ? CACHE_BLOCK_COLUMNS : max(data.paug, 1),
+        workers = threaded ? Threads.nthreads() : 1
+    )
 
     covariance.generation += UInt(1)
     return true
@@ -290,7 +298,7 @@ end
 #Update Covariance - Y projections
 function _refresh_response_terms!(sc)
     covariance, response, data = sc.covariance, sc.response, sc.data
-    
+
     @inbounds @simd for i in eachindex(response.weighted)
         response.weighted[i] = covariance.d2[i] * response.yu[i]
     end
@@ -304,7 +312,7 @@ function _refresh_response_terms!(sc)
     end
     # Orthogonal-complement form avoids subtracting two nearly equal norms.
     q = covariance.sinv * response.perp2
-    
+
     for i in eachindex(response.yu)
         q += covariance.invden[i] * response.yu[i]^2
     end
@@ -318,10 +326,10 @@ end
 function update_response!(sc::SCache, Y)
     data, response = sc.data, sc.response
     Y isa AbstractVector && length(Y) == data.n || throw(DimensionMismatch("response must be a vector of the original length"))
-    
+
     _column_dots!(response.yx, data.Xaug, Y, one(eltype(response.yx)), zero(eltype(response.yx)))
     copyto!(response.residual, Y)
-    
+
     if data.ns > 0
         mul!(response.yu, transpose(data.U), Y)
         mul!(response.residual, data.U, response.yu, -one(eltype(response.yu)), one(eltype(response.yu)))
@@ -349,44 +357,44 @@ must be finite and nonnegative; an empty basis is supported. No orthogonality
 check is performed in the hot path.
 """
 function makeSCache(ps::ParState2{T}) where {T}
-   
-    Xaug, Y, U, S = ps.Xaug, ps.Y, ps.U, ps.S 
+
+    Xaug, Y, U, S = ps.Xaug, ps.Y, ps.U, ps.S
     n, paug = size(Xaug)
 
-    n > 0 && paug > 0 && Y isa AbstractVector && size(U,1) == n && length(Y) == n && size(U,2) == length(S) &&
-        length(S) <= n && ps.n == n && ps.p+1 == paug ||
+    n > 0 && paug > 0 && Y isa AbstractVector && size(U, 1) == n && length(Y) == n && size(U, 2) == length(S) &&
+        length(S) <= n && ps.n == n && ps.p + 1 == paug ||
         throw(DimensionMismatch("design, response and eigenbasis dimensions disagree"))
-    
-        all(x -> isfinite(x) && x >= 0, S) || throw(ArgumentError("eigenvalues must be finite and nonnegative"))
-    
+
+    all(x -> isfinite(x) && x >= 0, S) || throw(ArgumentError("eigenvalues must be finite and nonnegative"))
+
     _positive_variance(ps.r, "r")
     _positive_variance(ps.s, "s")
 
     ns = length(S)
-    V = Matrix{T}(undef,n,ns)
+    V = Matrix{T}(undef, n, ns)
 
     for j in 1:ns, i in 1:n
-        V[i,j] = U[i,j] * sqrt(S[j])
+        V[i, j] = U[i, j] * sqrt(S[j])
     end
 
-    UtX = Matrix{T}(undef,ns,paug)
+    UtX = Matrix{T}(undef, ns, paug)
     ns > 0 && mul!(UtX, transpose(U), Xaug)
-    sqX = zeros(T,paug)
+    sqX = zeros(T, paug)
 
     for j in 1:paug
         v = zero(T)
         @inbounds @simd for i in 1:n
-            v += abs2(Xaug[i,j])
+            v += abs2(Xaug[i, j])
         end
         sqX[j] = v
     end
 
-    data = FixedCovarianceData(Xaug,U,S,V,UtX,sqX,n,paug,ns)
-    covariance = CovarianceState{T}(ps.r,ps.s,ns,paug)
-    response = ResponseState{T}(n,ns,paug)
-    sc = SCache(data,covariance,response)
+    data = FixedCovarianceData(Xaug, U, S, V, UtX, sqX, n, paug, ns)
+    covariance = CovarianceState{T}(ps.r, ps.s, ns, paug)
+    response = ResponseState{T}(n, ns, paug)
+    sc = SCache(data, covariance, response)
 
-    updateSCache!(sc,ps)
+    updateSCache!(sc, ps)
 
     return sc
 end

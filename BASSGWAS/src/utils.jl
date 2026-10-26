@@ -26,13 +26,13 @@ function _state_float_type(types...)
 end
 
 function _foreach_block_worker!(context, worker, nb, nw, n, blocksize)::Int
-    
-    first_block = fld((worker-1)*nb,nw)+1
-    last_block = fld(worker*nb,nw)
-    
+
+    first_block = fld((worker - 1) * nb, nw) + 1
+    last_block = fld(worker * nb, nw)
+
     for b in first_block:last_block
-        lo = (b-1)*blocksize+1
-        status = context.task!(context.data,lo,min(b*blocksize,n),worker)::Int
+        lo = (b - 1) * blocksize + 1
+        status = context.task!(context.data, lo, min(b * blocksize, n), worker)::Int
         status == 0 || return status
     end
 
@@ -57,25 +57,27 @@ The runner allocates its own per-worker status vector for parallel execution;
 the serial path needs no status storage. Empty input invokes no callbacks.
 `n` must be nonnegative; `blocksize` and `workers` must be positive integers.
 """
-function foreach_block!(task!::F, data::D, n::Integer;
-                        blocksize::Integer, workers::Integer=Threads.nthreads())::Int where {F,D}
+function foreach_block!(
+        task!::F, data::D, n::Integer;
+        blocksize::Integer, workers::Integer = Threads.nthreads()
+    )::Int where {F, D}
 
     n >= 0 || throw(ArgumentError("n must be nonnegative"))
     blocksize > 0 || throw(ArgumentError("blocksize must be positive"))
     workers > 0 || throw(ArgumentError("workers must be positive"))
 
     n == 0 && return 0
-    nb = cld(n,blocksize)
-    nw = min(workers,Threads.nthreads(),nb)
+    nb = cld(n, blocksize)
+    nw = min(workers, Threads.nthreads(), nb)
 
     # Bundle captures to preserve the original array types for BLAS dispatch.
-    context = (;task!,data)
-    nw == 1 && return _foreach_block_worker!(context,1,nb,nw,n,blocksize)
+    context = (; task!, data)
+    nw == 1 && return _foreach_block_worker!(context, 1, nb, nw, n, blocksize)
 
-    statuses = zeros(Int,nw)
-    
+    statuses = zeros(Int, nw)
+
     @batch for worker in 1:nw
-        statuses[worker] = _foreach_block_worker!(context,worker,nb,nw,n,blocksize)
+        statuses[worker] = _foreach_block_worker!(context, worker, nb, nw, n, blocksize)
     end
 
     for status in statuses
@@ -87,23 +89,27 @@ end
 
 # Column dots are memory-bound for large predictor sets. Each worker reads
 # contiguous columns and owns disjoint outputs, including strided active rows.
-function _column_dots_block!(data,lo,hi,worker)
-    (;out,A,x,scale_product,scale_previous) = data
-    mul!(view(out,lo:hi), transpose(view(A,:,lo:hi)), x,
-        scale_product, scale_previous)
+function _column_dots_block!(data, lo, hi, worker)
+    (; out, A, x, scale_product, scale_previous) = data
+    mul!(
+        view(out, lo:hi), transpose(view(A, :, lo:hi)), x,
+        scale_product, scale_previous
+    )
 
     return 0
 end
 
-function _column_dots!(out,A,x,scale_product,scale_previous)
+function _column_dots!(out, A, x, scale_product, scale_previous)
 
-    P = size(A,2)
+    P = size(A, 2)
 
     threaded = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && length(A) >= CACHE_THREAD_WORK
 
-    foreach_block!(_column_dots_block!, (;out,A,x,scale_product,scale_previous), P;
-        blocksize=threaded ? CACHE_BLOCK_COLUMNS : max(P,1),
-        workers=threaded ? Threads.nthreads() : 1)
+    foreach_block!(
+        _column_dots_block!, (; out, A, x, scale_product, scale_previous), P;
+        blocksize = threaded ? CACHE_BLOCK_COLUMNS : max(P, 1),
+        workers = threaded ? Threads.nthreads() : 1
+    )
 
     return nothing
 end

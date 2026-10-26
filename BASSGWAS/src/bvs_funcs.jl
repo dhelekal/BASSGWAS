@@ -37,7 +37,7 @@ Numerical arrays and scalars share the concrete floating-point type `T`;
 - `xi`: Auxiliary-update intensity.
 - `eps`: Weighted-TGS regularization weight.
 """
-mutable struct wTGSState2{T<:AbstractFloat}
+mutable struct wTGSState2{T <: AbstractFloat}
     p::Int
     γ::Vector{Int}
     dets::Vector{T}
@@ -51,28 +51,34 @@ mutable struct wTGSState2{T<:AbstractFloat}
     xi::T
     eps::T
 
-    function wTGSState2{T}(p::Integer, γ::AbstractVector{<:Integer},
-                           dets, ssq, llrs, pips, conds, rates, rsums,
-                           ll_curr, xi, eps) where {T<:AbstractFloat}
+    function wTGSState2{T}(
+            p::Integer, γ::AbstractVector{<:Integer},
+            dets, ssq, llrs, pips, conds, rates, rsums,
+            ll_curr, xi, eps
+        ) where {T <: AbstractFloat}
         isconcretetype(T) || throw(ArgumentError("state element type must be concrete"))
         p >= 0 && length(γ) == p &&
-            all(x -> x isa AbstractVector && length(x) == p,(dets,ssq,llrs,pips,conds)) &&
+            all(x -> x isa AbstractVector && length(x) == p, (dets, ssq, llrs, pips, conds)) &&
             rates isa AbstractVector && rsums isa AbstractVector &&
-            length(rates) == p+1 && length(rsums) == p+1 ||
+            length(rates) == p + 1 && length(rsums) == p + 1 ||
             throw(DimensionMismatch("state arrays must match predictor and move counts"))
-        all(x -> x == 0 || x == 1,γ) || throw(ArgumentError("inclusion values must be zero or one"))
+        all(x -> x == 0 || x == 1, γ) || throw(ArgumentError("inclusion values must be zero or one"))
         xi, eps = T(xi), T(eps)
         isfinite(xi) && xi >= 0 || throw(ArgumentError("xi must be finite and nonnegative"))
         isfinite(eps) && eps >= 0 || throw(ArgumentError("eps must be finite and nonnegative"))
-        return new{T}(p,γ,dets,ssq,llrs,pips,conds,rates,rsums,ll_curr,xi,eps)
+        return new{T}(p, γ, dets, ssq, llrs, pips, conds, rates, rsums, ll_curr, xi, eps)
     end
 end
 
-function wTGSState2(p::Integer, γ::AbstractVector{<:Integer}, dets, ssq, llrs,
-                    pips, conds, rates, rsums, ll_curr, xi, eps)
-    T = _state_float_type(map(eltype,(dets,ssq,llrs,pips,conds,rates,rsums))...,
-                         typeof(ll_curr),typeof(xi),typeof(eps))
-    return wTGSState2{T}(p,γ,dets,ssq,llrs,pips,conds,rates,rsums,ll_curr,xi,eps)
+function wTGSState2(
+        p::Integer, γ::AbstractVector{<:Integer}, dets, ssq, llrs,
+        pips, conds, rates, rsums, ll_curr, xi, eps
+    )
+    T = _state_float_type(
+        map(eltype, (dets, ssq, llrs, pips, conds, rates, rsums))...,
+        typeof(ll_curr), typeof(xi), typeof(eps)
+    )
+    return wTGSState2{T}(p, γ, dets, ssq, llrs, pips, conds, rates, rsums, ll_curr, xi, eps)
 end
 
 """
@@ -86,13 +92,13 @@ final active column in the augmented design. Both `state` and `qcache` are
 mutated.
 """
 function flip_gamma!(state, ps, qcache, to_flip)
-    newg = 1-state.γ[to_flip]
+    newg = 1 - state.γ[to_flip]
     state.γ[to_flip] = newg
     idx0 = findall(state.γ .== 0)
     idx1 = findall(state.γ .== 1)
-    paug = state.p+1
+    paug = state.p + 1
     idx1_icept = [idx1; paug]
-    if newg == 1
+    return if newg == 1
         add_active_QC(qcache, ps, to_flip, idx1_icept, idx0)
     else
         remove_active_QC(qcache, ps, to_flip, idx1_icept, idx0)
@@ -110,11 +116,13 @@ floating-point type, which must match the cache and likelihood. The method evalu
 current collapsed likelihood, every one-predictor alternative, and the initial
 move intensities. It returns `(state, qcache)`.
 """
-function init_state2(loglik::Aloglik{T}, ps::ParState2{T}, scache::SCache{D,T},
-                     γ0::AbstractVector{<:Integer}; eps = 5.0, xi_init = 1.0) where {D,T}
+function init_state2(
+        loglik::Aloglik{T}, ps::ParState2{T}, scache::SCache{D, T},
+        γ0::AbstractVector{<:Integer}; eps = 5.0, xi_init = 1.0
+    ) where {D, T}
     p = length(γ0)
     p == ps.p || throw(DimensionMismatch("inclusion vector must match predictor count"))
-    all(x -> x == 0 || x == 1,γ0) || throw(ArgumentError("inclusion values must be zero or one"))
+    all(x -> x == 0 || x == 1, γ0) || throw(ArgumentError("inclusion values must be zero or one"))
     eps, xi_init = T(eps), T(xi_init)
     isfinite(eps) && eps >= 0 || throw(ArgumentError("eps must be finite and nonnegative"))
     isfinite(xi_init) && xi_init >= 0 || throw(ArgumentError("xi_init must be finite and nonnegative"))
@@ -133,8 +141,8 @@ function init_state2(loglik::Aloglik{T}, ps::ParState2{T}, scache::SCache{D,T},
     pips = zeros(T, p)
     conds = zeros(T, p)
     llrs = zeros(T, p)
-    rates = zeros(T, p+1)
-    rsums = zeros(T, p+1)
+    rates = zeros(T, p + 1)
+    rsums = zeros(T, p + 1)
 
     paug = scache.paug
     idx1_icept = [idx1; paug]
@@ -147,7 +155,7 @@ function init_state2(loglik::Aloglik{T}, ps::ParState2{T}, scache::SCache{D,T},
     comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
 
     # The final rate is reserved for an auxiliary, non-predictor update.
-    rates[p+1] = xi_init
+    rates[p + 1] = xi_init
     cumsum!(rsums, rates)
 
     state = wTGSState2{T}(p, γ, dets, ssq, llrs, pips, conds, rates, rsums, ll_curr, xi_init, eps)
@@ -162,8 +170,10 @@ intensities after model or continuous-parameter changes.
 
 Cached arrays in `state` and the active numerical workspace in `qcache` are updated in place.
 """
-function update_state2!(state::wTGSState2{T}, ps::ParState2{T}, scache::SCache{D,T},
-                        qcache::QCache{T}, loglik::Aloglik{T}) where {D,T}
+function update_state2!(
+        state::wTGSState2{T}, ps::ParState2{T}, scache::SCache{D, T},
+        qcache::QCache{T}, loglik::Aloglik{T}
+    ) where {D, T}
 
     @unpack p, γ, dets, ssq, llrs, pips, conds, rates, rsums, xi, eps = state
 
@@ -174,15 +184,15 @@ function update_state2!(state::wTGSState2{T}, ps::ParState2{T}, scache::SCache{D
     mc = ps.mc
 
     idx0 = qcache.i0_set
-    idx1 = view(qcache.i1_set,1:(qcache.d-1))
+    idx1 = view(qcache.i1_set, 1:(qcache.d - 1))
 
     det_curr, ssq_curr = comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     state.ll_curr = loglik(det_curr, ssq_curr)
     comp_llrs!(llrs, dets, ssq, state.ll_curr, idx1, idx0, p, loglik, alpha, beta)
     comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
 
-    rates[p+1] = xi
-    _ = cumsum!(rsums, rates)
+    rates[p + 1] = xi
+    return _ = cumsum!(rsums, rates)
 end
 
 """
@@ -213,11 +223,13 @@ low-rank covariance and active-design caches.
 The intercept is always included with variance `ps.mc`; active predictor
 effects use variance `ps.c`.
 """
-function comp_ll2(scache::SCache{D,T}, qcache::QCache{T}, ps::ParState2{T},
-                  γ, loglik::Aloglik{T}) where {D,T}
+function comp_ll2(
+        scache::SCache{D, T}, qcache::QCache{T}, ps::ParState2{T},
+        γ, loglik::Aloglik{T}
+    ) where {D, T}
     ps.s == scache.covariance.s || throw(ArgumentError("refresh SCache after changing s"))
-    work = prepare_active!(qcache,scache,ps.c,ps.mc)
-    return loglik(work.det,work.ssq)
+    work = prepare_active!(qcache, scache, ps.c, ps.mc)
+    return loglik(work.det, work.ssq)
 end
 
 """
@@ -229,23 +241,23 @@ blocks; removal terms use the inverse diagonal and the shared response solve.
 """
 function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     s == scache.covariance.s || throw(ArgumentError("refresh SCache after changing s"))
-    work = prepare_active!(qcache,scache,c,mc)
+    work = prepare_active!(qcache, scache, c, mc)
     if !isempty(idx0)
-        candidate_terms!(dets,ssq,qcache,scache,c)
+        candidate_terms!(dets, ssq, qcache, scache, c)
     end
     lc = log(c)
-    @inbounds for i in 1:(qcache.d-1)
+    @inbounds for i in 1:(qcache.d - 1)
         index = qcache.i1_set[i]
         invdiag = work.invdiag
-        ssq[index] = work.ssq+work.beta[i]^2/invdiag[i]
-        dets[index] = work.det+log(invdiag[i])-lc
+        ssq[index] = work.ssq + work.beta[i]^2 / invdiag[i]
+        dets[index] = work.det + log(invdiag[i]) - lc
     end
-    return work.det,work.ssq
+    return work.det, work.ssq
 end
 
 
 function _rates_block!(data, lo, hi, worker)
-    (;rates,conds,pips,llrs,w) = data
+    (; rates, conds, pips, llrs, w) = data
     @turbo for k in lo:hi
         llr = llrs[k]
         cprob = logistic(-llr)
@@ -253,7 +265,7 @@ function _rates_block!(data, lo, hi, worker)
 
         conds[k] = cprob
         pips[k] = pip
-        rates[k] = 0.5*(pip+w)/cprob
+        rates[k] = 0.5 * (pip + w) / cprob
     end
     return 0
 end
@@ -271,11 +283,13 @@ receives the regularized move intensities. All three arrays are mutated.
 function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
     p = length(conds)
     p == 0 && return nothing
-    w = eps/p
+    w = eps / p
 
     nt = Threads.nthreads()
-    foreach_block!(_rates_block!, (;rates,conds,pips,llrs,w), p;
-        blocksize=cld(p,nt),workers=nt)
+    foreach_block!(
+        _rates_block!, (; rates, conds, pips, llrs, w), p;
+        blocksize = cld(p, nt), workers = nt
+    )
 
     for i in idx1
         llr = llrs[i]
@@ -284,15 +298,15 @@ function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
 
         conds[i] = cprob
         pips[i] = pip
-        rates[i] = 0.5*(pip+w)/cprob
+        rates[i] = 0.5 * (pip + w) / cprob
     end
 
-    nothing
+    return nothing
 end
 
 function _llrs_block!(data, lo, hi, worker)
-    (;llrs,dets,ssq,offset,loglik) = data
-    @views ll_plus_a!(llrs[lo:hi],dets[lo:hi],ssq[lo:hi],offset,loglik)
+    (; llrs, dets, ssq, offset, loglik) = data
+    @views ll_plus_a!(llrs[lo:hi], dets[lo:hi], ssq[lo:hi], offset, loglik)
     return 0
 end
 
@@ -305,25 +319,29 @@ current model.
 The calculation combines collapsed likelihood differences with the
 Beta-Binomial prior ratio implied by `alpha` and `beta`.
 """
-function comp_llrs!(llrs::AbstractVector{T}, dets::AbstractVector{T}, ssq::AbstractVector{T},
-                    ll_curr::T, idx1, idx0, p, loglik::Aloglik{T}, alpha, beta) where {T}
+function comp_llrs!(
+        llrs::AbstractVector{T}, dets::AbstractVector{T}, ssq::AbstractVector{T},
+        ll_curr::T, idx1, idx0, p, loglik::Aloglik{T}, alpha, beta
+    ) where {T}
     p == 0 && return nothing
     γ = length(idx1)
     prior_curr = _inc_prior(γ, p, alpha, beta)
     # Compute prior changes for adding or removing one included predictor.
-    lpr_incl = γ < p ? T(_inc_prior(γ+1, p, alpha, beta) - prior_curr) : zero(T)
-    lpr_excl = γ > 0 ? T(_inc_prior(γ-1, p, alpha, beta) - prior_curr) : T(-Inf)
+    lpr_incl = γ < p ? T(_inc_prior(γ + 1, p, alpha, beta) - prior_curr) : zero(T)
+    lpr_excl = γ > 0 ? T(_inc_prior(γ - 1, p, alpha, beta) - prior_curr) : T(-Inf)
 
-    n=size(llrs,1)
+    n = size(llrs, 1)
     nt = Threads.nthreads()
-    foreach_block!(_llrs_block!, (;llrs,dets,ssq,offset=lpr_incl-ll_curr,loglik), n;
-        blocksize=max(cld(n,nt),1),workers=nt)
+    foreach_block!(
+        _llrs_block!, (; llrs, dets, ssq, offset = lpr_incl - ll_curr, loglik), n;
+        blocksize = max(cld(n, nt), 1), workers = nt
+    )
 
     for i in idx1
-        llrs[i] += lpr_excl-lpr_incl
+        llrs[i] += lpr_excl - lpr_incl
     end
 
-    nothing
+    return nothing
 end
 
 """
@@ -349,8 +367,10 @@ This test-only reference implementation mutates `state` and is used to verify
 the cached Woodbury and rank-one update path. It returns `logabsdet(C)` for the
 explicit covariance matrix.
 """
-function _update_state_test!(state::wTGSState2{T}, ps::ParState2{T}, scache::SCache{D,T},
-                             qcache::QCache{T}, loglik::Aloglik{T}; eps=5.0) where {D,T}
+function _update_state_test!(
+        state::wTGSState2{T}, ps::ParState2{T}, scache::SCache{D, T},
+        qcache::QCache{T}, loglik::Aloglik{T}; eps = 5.0
+    ) where {D, T}
 
     @unpack p, γ, dets, ssq, llrs, pips, conds, rates, rsums = state
 
@@ -367,7 +387,7 @@ function _update_state_test!(state::wTGSState2{T}, ps::ParState2{T}, scache::SCa
     idx0 = findall(γ .== 0)
     idx1 = findall(γ .== 1)
 
-    C = s*Diagonal(ones(n)) + r*scache.U*Diagonal(scache.S)*scache.U'
+    C = s * Diagonal(ones(n)) + r * scache.U * Diagonal(scache.S) * scache.U'
     X = ps.Xaug
     Y = ps.Y
 
@@ -382,9 +402,9 @@ function _update_state_test!(state::wTGSState2{T}, ps::ParState2{T}, scache::SCa
     comp_llrs!(llrs, dets, ssq, state.ll_curr, idx1, idx0, p, loglik, alpha, beta)
     comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
 
-    rates[p+1] = state.xi
+    rates[p + 1] = state.xi
     _ = cumsum!(rsums, rates)
-    return(logabsdet(C))
+    return (logabsdet(C))
 end
 
 
@@ -397,14 +417,14 @@ one-predictor alternative to the active model.
 This dense reference routine returns `(dets, ssq)` in full predictor order.
 """
 function _direct_comp(C, X, Y, c, mc, idx1, idx0, paug)
-    dets = ones(paug-1)
-    ssq = ones(paug-1)
+    dets = ones(paug - 1)
+    ssq = ones(paug - 1)
 
     idx1_icept = [idx1; paug]
     Xγ = X[:, idx1_icept]
 
     for i in idx0
-        Xi =  cat(X[:, i], Xγ, dims=2)
+        Xi = cat(X[:, i], Xγ, dims = 2)
         dets[i], ssq[i] = _direct(C, c, mc, Xi, Y)
     end
 
@@ -427,11 +447,11 @@ uses `mc`. The function returns `(det, qform)`.
 """
 function _direct(C, c, mc, X, Y)
     n = size(X, 2)
-    diagshift = c*ones(n)
+    diagshift = c * ones(n)
     diagshift[end] = mc
-    Q = cholesky(Hermitian(C + X*Diagonal(diagshift)*X'))
+    Q = cholesky(Hermitian(C + X * Diagonal(diagshift) * X'))
     det = logabsdet(Q)[1]
-    qform = Y'*(Q\Y)
+    qform = Y' * (Q \ Y)
     return det, qform
 end
 
@@ -447,13 +467,13 @@ function _ssq_direct(Y1, Y2, r, c, mc, X, U, S)
     m = size(X, 1)
     n = size(X, 2)
     s = 1.0
-    C = s*Diagonal(ones(m)) + r*U*Diagonal(S)*U'
+    C = s * Diagonal(ones(m)) + r * U * Diagonal(S) * U'
 
-    diagshift = c*ones(n)
+    diagshift = c * ones(n)
     diagshift[end] = mc
 
-    Q= cholesky(Hermitian(C + X*Diagonal(diagshift)*X'))
-    qform = Y1'*(Q\Y2)
+    Q = cholesky(Hermitian(C + X * Diagonal(diagshift) * X'))
+    qform = Y1' * (Q \ Y2)
     return qform
 end
 
@@ -467,12 +487,12 @@ function _det_direct(r, c, mc, X, U, S)
     m = size(X, 1)
     n = size(X, 2)
     s = 1.0
-    C = s*Diagonal(ones(m)) + r*U*Diagonal(S)*U'
+    C = s * Diagonal(ones(m)) + r * U * Diagonal(S) * U'
 
-    diagshift = c*ones(n)
+    diagshift = c * ones(n)
     diagshift[end] = mc
 
-    Q= cholesky(Hermitian(C + X*Diagonal(diagshift)*X'))
+    Q = cholesky(Hermitian(C + X * Diagonal(diagshift) * X'))
     return logabsdet(Q)[1]
 end
 
@@ -487,27 +507,27 @@ implementation and fixes the residual variance multiplier at one.
 """
 function _direct_ll(Y, r, c, mc, X, U, S, nu, lambda)
 
-    V = U*Diagonal(sqrt.(S))
+    V = U * Diagonal(sqrt.(S))
     K = [X V]
 
     n = size(X, 1)
     l = size(X, 2)
     m = size(V, 2)
 
-    sigmasq = zeros(l+m)
-    sigmasq[1:(l-1)] .= 1.0/c
-    sigmasq[l] = 1.0/mc
-    sigmasq[(l+1):(m+l)] .= 1.0/r
+    sigmasq = zeros(l + m)
+    sigmasq[1:(l - 1)] .= 1.0 / c
+    sigmasq[l] = 1.0 / mc
+    sigmasq[(l + 1):(m + l)] .= 1.0 / r
 
     Sd = Diagonal(sigmasq)
     Qinv = K'K + Sd
     Qf = cholesky(Qinv)
 
-    ssq = Y'Y - Y'K*(Qf\(K'Y))
-    det1 = 0.5*sum(log.(abs.(sigmasq)))
+    ssq = Y'Y - Y'K * (Qf \ (K'Y))
+    det1 = 0.5 * sum(log.(abs.(sigmasq)))
     det2 = -sum(log.(abs.(diag(Qf.U))))
 
-    return det1+det2-0.5*(n+nu)*log(nu*lambda + ssq)
+    return det1 + det2 - 0.5 * (n + nu) * log(nu * lambda + ssq)
 end
 
 """
@@ -532,15 +552,15 @@ function _comp_ssq(Y1, Y2, r, c, mc, X, XtX, UtX, U, S)
     lmul!(D, Fl1)
     lmul!(D, Fl2)
 
-    DUtX = D*UtX
+    DUtX = D * UtX
 
     qterm = dot(Y1, Y2) - dot(Fl1, Fl2)
-    FX1 = -Fl1'*DUtX + (Y1'*X)
-    FX2 = -Fl2'*DUtX + (Y2'*X)
+    FX1 = -Fl1' * DUtX + (Y1' * X)
+    FX2 = -Fl2' * DUtX + (Y2' * X)
 
     A = XtX - DUtX' * DUtX
-    A += UniformScaling(1.0/c)
-    A[end, end] += (-1.0/c + 1.0/mc)
+    A += UniformScaling(1.0 / c)
+    A[end, end] += (-1.0 / c + 1.0 / mc)
 
     cholesky!(Hermitian(A))
     Atr = LowerTriangular(A')
@@ -570,14 +590,14 @@ function _comp_ssq(Y, r, c, mc, X, XtX, UtX, U, S)
 
     Fl = U' * Y
     lmul!(D, Fl)
-    DUtX = D*UtX
+    DUtX = D * UtX
 
     qterm = dot(Y, Y) - dot(Fl, Fl)
-    FX = -Fl'*DUtX + (Y'*X)
+    FX = -Fl' * DUtX + (Y' * X)
 
     A = XtX - DUtX' * DUtX
-    A += UniformScaling(1.0/c)
-    A[end, end] += (-1.0/c + 1.0/mc)
+    A += UniformScaling(1.0 / c)
+    A[end, end] += (-1.0 / c + 1.0 / mc)
 
     cholesky!(Hermitian(A))
     Atr = LowerTriangular(A')
@@ -604,16 +624,16 @@ function _comp_llterms(Y, r, c, mc, X, XtX, UtX, YtU, S)
     _comp_d!(d, S, r, one(r))
 
     D = Diagonal(d)
-    Fl = D*YtU'
-    D2 = D*D
+    Fl = D * YtU'
+    D2 = D * D
     B = D2 * UtX
-    FX = -YtU*B + (Y'*X)
+    FX = -YtU * B + (Y' * X)
 
     qterm = dot(Y, Y) - dot(Fl, Fl)
 
     A = XtX - UtX' * B
-    A += UniformScaling(1.0/c)
-    A[end, end] += (-1.0/c + 1.0/mc)
+    A += UniformScaling(1.0 / c)
+    A[end, end] += (-1.0 / c + 1.0 / mc)
 
     cholesky!(Hermitian(A))
     Atr = LowerTriangular(A')
@@ -623,10 +643,10 @@ function _comp_llterms(Y, r, c, mc, X, XtX, UtX, YtU, S)
 
     # Stand-alone compatibility path; the sampler uses proposal_terms! and
     # retains all of this workspace across proposals.
-    cdet = _covariance_weights!(d, similar(d), similar(d), S, r, one(r), size(X,1))
+    cdet = _covariance_weights!(d, similar(d), similar(d), S, r, one(r), size(X, 1))
 
-    det_curr = 2.0*logabsdet(Atr)[1]
-    det_curr += cdet + (k-1)*log(c) + log(mc)
+    det_curr = 2.0 * logabsdet(Atr)[1]
+    det_curr += cdet + (k - 1) * log(c) + log(mc)
 
     return ssq, det_curr
 end

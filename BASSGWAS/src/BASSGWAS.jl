@@ -48,7 +48,7 @@ include("ActiveWorkspace.jl")
 include("QCache.jl")
 include("likelihoods.jl")
 include("bvs_funcs.jl")
-export wTGSState2 
+export wTGSState2
 include("ProbitSampler.jl")
 export ProbitBVSSampler, next_step!, get_state, is_adapted
 include("postpred.jl")

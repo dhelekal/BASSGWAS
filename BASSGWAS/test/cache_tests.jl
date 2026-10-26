@@ -7,23 +7,25 @@ function check_scache(sc, ps)
     C = ps.s * Matrix{Float64}(I, ps.n, ps.n) + ps.r * ps.U * Diagonal(ps.S) * ps.U'
     F = cholesky(Symmetric(C))
     precision = F \ Matrix{Float64}(I, ps.n, ps.n)
-    @test isapprox(sc.covariance.gramdiag, diag(ps.Xaug' * precision * ps.Xaug); rtol=NUM_RTOL, atol=NUM_ATOL)
-    @test isapprox(sc.FX, ps.Y' * precision * ps.Xaug; rtol=NUM_RTOL, atol=NUM_ATOL)
-    @test isapprox(sc.qterm, dot(ps.Y, F \ ps.Y); rtol=NUM_RTOL, atol=NUM_ATOL)
-    @test isapprox(sc.cdet, 2 * sum(log, diag(F.L)); rtol=NUM_RTOL, atol=NUM_ATOL)
-    @test isapprox(sc.QX' * sc.QX, ps.Xaug' * (I / ps.s - precision) * ps.Xaug;
-                   rtol=NUM_RTOL, atol=NUM_ATOL)
-    @test isapprox(sc.YtX, ps.Y' * ps.Xaug; rtol=NUM_RTOL, atol=NUM_ATOL)
-    @test isapprox(sc.YtU, ps.Y' * ps.U; rtol=NUM_RTOL, atol=NUM_ATOL)
+    @test isapprox(sc.covariance.gramdiag, diag(ps.Xaug' * precision * ps.Xaug); rtol = NUM_RTOL, atol = NUM_ATOL)
+    @test isapprox(sc.FX, ps.Y' * precision * ps.Xaug; rtol = NUM_RTOL, atol = NUM_ATOL)
+    @test isapprox(sc.qterm, dot(ps.Y, F \ ps.Y); rtol = NUM_RTOL, atol = NUM_ATOL)
+    @test isapprox(sc.cdet, 2 * sum(log, diag(F.L)); rtol = NUM_RTOL, atol = NUM_ATOL)
+    @test isapprox(
+        sc.QX' * sc.QX, ps.Xaug' * (I / ps.s - precision) * ps.Xaug;
+        rtol = NUM_RTOL, atol = NUM_ATOL
+    )
+    @test isapprox(sc.YtX, ps.Y' * ps.Xaug; rtol = NUM_RTOL, atol = NUM_ATOL)
+    return @test isapprox(sc.YtU, ps.Y' * ps.U; rtol = NUM_RTOL, atol = NUM_ATOL)
 end
 
 @testset "Cache updates along all model toggles" begin
     for design in (:correlated, :degenerate), rank in (3, 8),
-        ll in (BASSGWAS.StdNormLogLik{Float64}(), BASSGWAS.TDistLogLik(3.5, 1.2, 8))
+            ll in (BASSGWAS.StdNormLogLik{Float64}(), BASSGWAS.TDistLogLik(3.5, 1.2, 8))
         @testset "design=$design rank=$rank likelihood=$(typeof(ll))" begin
             ps = numerical_fixture(4; rank, design)
             sc = BASSGWAS.makeSCache(ps)
-            state, qc = BASSGWAS.init_state2(ll, ps, sc, zeros(Int64, 4); eps=0.6, xi_init=0.9)
+            state, qc = BASSGWAS.init_state2(ll, ps, sc, zeros(Int64, 4); eps = 0.6, xi_init = 0.9)
             # Consecutive Gray-code masks, including the final return to zero,
             # differ at exactly one bit. Every model is visited in each pass.
             path = [xor(i, i >> 1) for i in 0:15]
@@ -58,13 +60,17 @@ end
                             check_state(state, qc, ps, sc, ll, exact, mask)
                             check_qcache(qc, ps, exact.gammas[mask + 1])
                             fresh_sc = BASSGWAS.makeSCache(ps)
-                            fresh, fresh_qc = BASSGWAS.init_state2(ll, ps, fresh_sc,
-                                exact.gammas[mask + 1]; eps=state.eps, xi_init=state.xi)
+                            fresh, fresh_qc = BASSGWAS.init_state2(
+                                ll, ps, fresh_sc,
+                                exact.gammas[mask + 1]; eps = state.eps, xi_init = state.xi
+                            )
                             for field in (:dets, :ssq, :llrs, :conds, :pips, :rates, :rsums, :ll_curr)
-                                @test isapprox(getproperty(state, field), getproperty(fresh, field);
-                                               rtol=NUM_RTOL, atol=NUM_ATOL)
+                                @test isapprox(
+                                    getproperty(state, field), getproperty(fresh, field);
+                                    rtol = NUM_RTOL, atol = NUM_ATOL
+                                )
                             end
-                            @test isapprox(qc.XtX, fresh_qc.XtX; rtol=NUM_RTOL, atol=NUM_ATOL)
+                            @test isapprox(qc.XtX, fresh_qc.XtX; rtol = NUM_RTOL, atol = NUM_ATOL)
                             previous = mask
                         end
                     end

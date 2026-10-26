@@ -30,7 +30,7 @@ type `T`; counts use `Int`. Matching dense inputs are shared with the caller.
 - `s`: Residual variance multiplier.
 - `mc`: Intercept variance.
 """
-mutable struct ParState2{T<:AbstractFloat}
+mutable struct ParState2{T <: AbstractFloat}
     Xaug::Matrix{T}
     Y::Vector{T}
     U::Matrix{T}
@@ -44,23 +44,25 @@ mutable struct ParState2{T<:AbstractFloat}
     s::T
     mc::T
 
-    function ParState2{T}(Xaug, Y, U, S, p::Integer, n::Integer,
-                          alpha, beta, c, r, s, mc) where {T<:AbstractFloat}
+    function ParState2{T}(
+            Xaug, Y, U, S, p::Integer, n::Integer,
+            alpha, beta, c, r, s, mc
+        ) where {T <: AbstractFloat}
         isconcretetype(T) || throw(ArgumentError("state element type must be concrete"))
         Xaug, Y = convert(Matrix{T}, Xaug), convert(Vector{T}, Y)
         U, S = convert(Matrix{T}, U), convert(Vector{T}, S)
         alpha, beta, c, r, s, mc = T.((alpha, beta, c, r, s, mc))
-        n > 0 && p >= 0 && size(Xaug) == (n,p+1) && length(Y) == n &&
-            size(U) == (n,length(S)) && length(S) <= n ||
+        n > 0 && p >= 0 && size(Xaug) == (n, p + 1) && length(Y) == n &&
+            size(U) == (n, length(S)) && length(S) <= n ||
             throw(DimensionMismatch("design, response, eigenbasis and counts must agree"))
-        all(isfinite,Xaug) && all(isfinite,Y) && all(isfinite,U) ||
+        all(isfinite, Xaug) && all(isfinite, Y) && all(isfinite, U) ||
             throw(ArgumentError("design, response and eigenvectors must be finite"))
-        all(x -> isfinite(x) && x >= 0,S) ||
+        all(x -> isfinite(x) && x >= 0, S) ||
             throw(ArgumentError("eigenvalues must be finite and nonnegative"))
-        for (name,value) in (("alpha",alpha),("beta",beta),("c",c),("r",r),("s",s),("mc",mc))
+        for (name, value) in (("alpha", alpha), ("beta", beta), ("c", c), ("r", r), ("s", s), ("mc", mc))
             isfinite(value) && value > 0 || throw(ArgumentError("$name must be finite and positive"))
         end
-        return new{T}(Xaug,Y,U,S,p,n,alpha,beta,c,r,s,mc)
+        return new{T}(Xaug, Y, U, S, p, n, alpha, beta, c, r, s, mc)
     end
 end
 
@@ -76,28 +78,36 @@ rows of `U` correspond to the same observations. Infer `T` from all array
 element types and scalar parameters, or select it explicitly. Inputs are
 converted to dense storage once; already matching `Y`, `U` and `S` are shared.
 """
-function ParState2(X::AbstractMatrix{<:Real}, Y::AbstractVector{<:Real},
-                   U::AbstractMatrix{<:Real}, S::AbstractVector{<:Real},
-                   alpha::Real, beta::Real, c::Real, r::Real, s::Real, mc::Real)
-    T = _state_float_type(eltype(X),eltype(Y),eltype(U),eltype(S),
-                         typeof(alpha),typeof(beta),typeof(c),typeof(r),typeof(s),typeof(mc))
-    return ParState2{T}(X,Y,U,S,alpha,beta,c,r,s,mc)
+function ParState2(
+        X::AbstractMatrix{<:Real}, Y::AbstractVector{<:Real},
+        U::AbstractMatrix{<:Real}, S::AbstractVector{<:Real},
+        alpha::Real, beta::Real, c::Real, r::Real, s::Real, mc::Real
+    )
+    T = _state_float_type(
+        eltype(X), eltype(Y), eltype(U), eltype(S),
+        typeof(alpha), typeof(beta), typeof(c), typeof(r), typeof(s), typeof(mc)
+    )
+    return ParState2{T}(X, Y, U, S, alpha, beta, c, r, s, mc)
 end
 
-function ParState2{T}(X::AbstractMatrix{<:Real}, Y::AbstractVector{<:Real},
-                      U::AbstractMatrix{<:Real}, S::AbstractVector{<:Real},
-                      alpha::Real, beta::Real, c::Real, r::Real, s::Real, mc::Real) where {T<:AbstractFloat}
+function ParState2{T}(
+        X::AbstractMatrix{<:Real}, Y::AbstractVector{<:Real},
+        U::AbstractMatrix{<:Real}, S::AbstractVector{<:Real},
+        alpha::Real, beta::Real, c::Real, r::Real, s::Real, mc::Real
+    ) where {T <: AbstractFloat}
     isconcretetype(T) || throw(ArgumentError("state element type must be concrete"))
     n, p = size(X)
-    Xaug = Matrix{T}(undef,n,p+1)
-    copyto!(view(Xaug,:,1:p),X)
-    fill!(view(Xaug,:,p+1),one(T))
-    return ParState2{T}(Xaug,Y,U,S,p,n,alpha,beta,c,r,s,mc)
+    Xaug = Matrix{T}(undef, n, p + 1)
+    copyto!(view(Xaug, :, 1:p), X)
+    fill!(view(Xaug, :, p + 1), one(T))
+    return ParState2{T}(Xaug, Y, U, S, p, n, alpha, beta, c, r, s, mc)
 end
 
 # Preserve the constructor for an already augmented design.
 function ParState2(Xaug, Y, U, S, p::Integer, n::Integer, alpha, beta, c, r, s, mc)
-    T = _state_float_type(eltype(Xaug),eltype(Y),eltype(U),eltype(S),
-                         typeof(alpha),typeof(beta),typeof(c),typeof(r),typeof(s),typeof(mc))
-    return ParState2{T}(Xaug,Y,U,S,p,n,alpha,beta,c,r,s,mc)
+    T = _state_float_type(
+        eltype(Xaug), eltype(Y), eltype(U), eltype(S),
+        typeof(alpha), typeof(beta), typeof(c), typeof(r), typeof(s), typeof(mc)
+    )
+    return ParState2{T}(Xaug, Y, U, S, p, n, alpha, beta, c, r, s, mc)
 end

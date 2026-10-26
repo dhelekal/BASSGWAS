@@ -21,7 +21,7 @@ Concrete subtypes accept a log-determinant term and a quadratic form of type
 `T` and return the corresponding log likelihood of type `T`, up to an additive
 constant. Consumers share this type with their parameter state and caches.
 """
-abstract type Aloglik{T<:AbstractFloat} end
+abstract type Aloglik{T <: AbstractFloat} end
 
 """
     TDistLogLik{T} <: Aloglik{T}
@@ -34,7 +34,7 @@ variance with scaled-inverse-chi-squared hyperparameters.
 - `lambda`: Prior scale.
 - `n`: Number of observations.
 """
-struct TDistLogLik{T<:AbstractFloat} <: Aloglik{T}
+struct TDistLogLik{T <: AbstractFloat} <: Aloglik{T}
     nu::T
     lambda::T
     n::T
@@ -47,9 +47,9 @@ Construct a collapsed Student-t likelihood after promoting its three
 parameters to a common floating-point type. Use `TDistLogLik{T}` to select
 the type explicitly.
 """
-function TDistLogLik(nu::Real,lambda::Real,n::Real)
-    T = _state_float_type(typeof(nu),typeof(lambda),typeof(n))
-    return TDistLogLik{T}(nu,lambda,n)
+function TDistLogLik(nu::Real, lambda::Real, n::Real)
+    T = _state_float_type(typeof(nu), typeof(lambda), typeof(n))
+    return TDistLogLik{T}(nu, lambda, n)
 end
 
 """
@@ -58,7 +58,7 @@ end
 Evaluate the collapsed log likelihood for log-determinant `det` and quadratic
 form `ssq`, omitting constants shared by all models.
 """
-@inline (x::TDistLogLik{T})(det::T, ssq::T) where{T} = -(one(T)/2) * det - (one(T)/2) * (x.nu+x.n) * log(x.nu*x.lambda + ssq)
+@inline (x::TDistLogLik{T})(det::T, ssq::T) where {T} = -(one(T) / 2) * det - (one(T) / 2) * (x.nu + x.n) * log(x.nu * x.lambda + ssq)
 
 """
     ll_plus_a!(ll, det, ssq, a, x::TDistLogLik)
@@ -66,12 +66,12 @@ form `ssq`, omitting constants shared by all models.
 Fill `ll` with the elementwise collapsed Student-t log likelihood for `det`
 and `ssq`, adding the constant `a` to every result.
 """
-function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::TDistLogLik{T}) where{T<:AbstractFloat}
-    nu=x.nu
-    n=x.n
-    lambda=x.lambda
-    @turbo for i in axes(ll,1)
-        ll[i] = -(one(T)/2) * det[i] - (one(T)/2) * (nu+n) * log(nu*lambda + ssq[i]) + a
+function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::TDistLogLik{T}) where {T <: AbstractFloat}
+    nu = x.nu
+    n = x.n
+    lambda = x.lambda
+    return @turbo for i in axes(ll, 1)
+        ll[i] = -(one(T) / 2) * det[i] - (one(T) / 2) * (nu + n) * log(nu * lambda + ssq[i]) + a
     end
 end
 
@@ -81,7 +81,7 @@ end
 Collapsed standard-normal log likelihood for determinant and quadratic-form
 terms of element type `T`.
 """
-struct StdNormLogLik{T<:AbstractFloat} <: Aloglik{T} end
+struct StdNormLogLik{T <: AbstractFloat} <: Aloglik{T} end
 
 """
     (x::StdNormLogLik)(det, ssq)
@@ -89,7 +89,7 @@ struct StdNormLogLik{T<:AbstractFloat} <: Aloglik{T} end
 Evaluate the standard-normal log likelihood for log-determinant `det` and
 quadratic form `ssq`, omitting constants shared by all models.
 """
-(x::StdNormLogLik{T})(det::T, ssq::T) where{T} = -(one(T)/2) * det - (one(T)/2) * ssq
+(x::StdNormLogLik{T})(det::T, ssq::T) where {T} = -(one(T) / 2) * det - (one(T) / 2) * ssq
 
 """
     ll_plus_a!(ll, det, ssq, a, x::StdNormLogLik)
@@ -97,8 +97,8 @@ quadratic form `ssq`, omitting constants shared by all models.
 Fill `ll` with the elementwise standard-normal log likelihood for `det` and
 `ssq`, adding the constant `a` to every result.
 """
-function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::StdNormLogLik{T}) where{T<:AbstractFloat}
-    @turbo for i in axes(ll,1)
-        ll[i] = -(one(T)/2) * det[i] - (one(T)/2) * ssq[i] + a
+function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::StdNormLogLik{T}) where {T <: AbstractFloat}
+    return @turbo for i in axes(ll, 1)
+        ll[i] = -(one(T) / 2) * det[i] - (one(T) / 2) * ssq[i] + a
     end
 end

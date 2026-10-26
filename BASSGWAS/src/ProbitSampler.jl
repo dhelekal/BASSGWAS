@@ -89,36 +89,40 @@ The initial predictor model is empty, with an intercept always included.
 Construction draws initial latent liabilities and positive variance values, so
 it advances `rng`.
 """
-function ProbitBVSSampler(X::AbstractMatrix{<:Real}, Y::AbstractVector{<:Integer}, U::AbstractMatrix{<:Real}, S::AbstractVector{<:Real},
-    alpha, beta; c=6.0, sample_c=true, mcinit=100.0, eps=5.0, nadapt=10000, xi_init = 5.0, adapt_xi=true, xi_targ=0.25, nu=5.0, lambda=0.6, rng=Random.default_rng())
+function ProbitBVSSampler(
+        X::AbstractMatrix{<:Real}, Y::AbstractVector{<:Integer}, U::AbstractMatrix{<:Real}, S::AbstractVector{<:Real},
+        alpha, beta; c = 6.0, sample_c = true, mcinit = 100.0, eps = 5.0, nadapt = 10000, xi_init = 5.0, adapt_xi = true, xi_targ = 0.25, nu = 5.0, lambda = 0.6, rng = Random.default_rng()
+    )
 
-    T = _state_float_type(eltype(X),eltype(U),eltype(S),typeof(alpha),typeof(beta),
-                         typeof(c),typeof(mcinit),typeof(eps),typeof(xi_init),
-                         typeof(xi_targ),typeof(nu),typeof(lambda))
-    alpha, beta, nu, lambda, eps, xi_init, xi_targ = T.((alpha,beta,nu,lambda,eps,xi_init,xi_targ))
+    T = _state_float_type(
+        eltype(X), eltype(U), eltype(S), typeof(alpha), typeof(beta),
+        typeof(c), typeof(mcinit), typeof(eps), typeof(xi_init),
+        typeof(xi_targ), typeof(nu), typeof(lambda)
+    )
+    alpha, beta, nu, lambda, eps, xi_init, xi_targ = T.((alpha, beta, nu, lambda, eps, xi_init, xi_targ))
     p = size(X, 2)
     n = size(Y, 1)
 
     γ0 = zeros(Int, p)
 
-    shape = nu/T(2)
+    shape = nu / T(2)
     scale = shape * lambda
 
     loglik = TDistLogLik{T}(nu, lambda, n)
 
     # Initialize latent liabilities on the side of zero fixed by each binary outcome.
-    signs = ifelse.(Y .> 0,one(T),-one(T))
+    signs = ifelse.(Y .> 0, one(T), -one(T))
     Yinit = abs.(randn(rng, T, n)) .* signs
-    rinit = abs(randn(rng,T)) + T(1e-8)
-    cinit = sample_c ? abs(randn(rng,T)) + T(1e-8) : T(c)
+    rinit = abs(randn(rng, T)) + T(1.0e-8)
+    cinit = sample_c ? abs(randn(rng, T)) + T(1.0e-8) : T(c)
 
-    sinit=one(T)
+    sinit = one(T)
 
     parState = ParState2{T}(X, Yinit, U, S, alpha, beta, cinit, rinit, sinit, mcinit)
     cache = makeSCache(parState)
-    tgsstate, qcache = init_state2(loglik, parState, cache, γ0; eps=eps, xi_init=xi_init)
+    tgsstate, qcache = init_state2(loglik, parState, cache, γ0; eps = eps, xi_init = xi_init)
 
-    adaptor = RWMAdaptor(T, sample_c ? 2 : 1, 25*div(nadapt,12))
+    adaptor = RWMAdaptor(T, sample_c ? 2 : 1, 25 * div(nadapt, 12))
 
     return ProbitBVSSampler(parState, cache, tgsstate, qcache, loglik, 0, 0, nadapt, !adapt_xi, adapt_xi, xi_targ, sample_c, adaptor, shape, scale, rng)
 end
@@ -149,7 +153,7 @@ function next_step!(samp::ProbitBVSSampler)
             xi_targ = samp.xi_targ
             xi = samp.wTGSState.xi
             rs = samp.wTGSState.rsums[end]
-            samp.wTGSState.xi = xi + (xi_targ - xi/rs)/(sqrt(samp.T))
+            samp.wTGSState.xi = xi + (xi_targ - xi / rs) / (sqrt(samp.T))
         end
     else
         gibbs_CG!(samp)
@@ -161,7 +165,7 @@ function next_step!(samp::ProbitBVSSampler)
     end
 
     n_active = sum(samp.wTGSState.γ)
-    n_active >= 100 &&
+    return n_active >= 100 &&
         @warn "Warning: The number of active variants has exceed 100. Number of active variants: $(n_active). If this warning appears repeatedly, the model is likely misspecified, or there is unmeasured confounding present!"
 end
 
@@ -202,8 +206,8 @@ function gibbs_CG!(samp::ProbitBVSSampler)
 
     ll_curr = samp.wTGSState.ll_curr
 
-    rprior = Exponential(-T(3)/log(T(0.05)))
-    cprior = truncated(InverseGamma(T(6),T(12)); lower = zero(T))
+    rprior = Exponential(-T(3) / log(T(0.05)))
+    cprior = truncated(InverseGamma(T(6), T(12)); lower = zero(T))
 
     adaptor = samp.adaptor
 
@@ -214,26 +218,26 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         rwm_scales = get_scales(adaptor)
 
         # Reflective jitter keeps the proposed standard deviation positive.
-        rprop = abs(rsqrt + i*randn(rng,T)*dt*rwm_scales[1] - T(1e-4)) + T(1e-4)
+        rprop = abs(rsqrt + i * randn(rng, T) * dt * rwm_scales[1] - T(1.0e-4)) + T(1.0e-4)
         cprop = csqrt
 
         if samp.sample_c
             # Apply the same positive-scale safeguard to the predictor effect.
-            cprop = abs(csqrt + i*randn(rng,T)*dt*rwm_scales[2] - T(1e-4)) + T(1e-4)
+            cprop = abs(csqrt + i * randn(rng, T) * dt * rwm_scales[2] - T(1.0e-4)) + T(1.0e-4)
         end
 
-        prll_curr = logpdf(rprior,rsqrt) + logpdf(cprior,csqrt)
-        prll_prop = logpdf(rprior,rprop) + logpdf(cprior,cprop)
+        prll_curr = logpdf(rprior, rsqrt) + logpdf(cprior, csqrt)
+        prll_prop = logpdf(rprior, rprop) + logpdf(cprior, cprop)
 
-        ssq, det = proposal_terms!(qc, sc, rprop*rprop, cprop*cprop, mc)
+        ssq, det = proposal_terms!(qc, sc, rprop * rprop, cprop * cprop, mc)
         ll_prop = samp.loglik(det, ssq)
 
         qr = ll_prop + prll_prop - ll_curr - prll_curr
-        u = log(rand(rng,T))
+        u = log(rand(rng, T))
 
         accept = 0
 
-        if u<=qr
+        if u <= qr
             accept = 1
             rsqrt = rprop
             csqrt = cprop
@@ -241,7 +245,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         end
 
         if !samp.isadapted
-            adapt!(adaptor, samp.sample_c ? [rsqrt,csqrt] : [rsqrt], accept)
+            adapt!(adaptor, samp.sample_c ? [rsqrt, csqrt] : [rsqrt], accept)
         end
     end
 
@@ -271,30 +275,30 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     beta = draw_betas(Y_old, r_new, c_new, mc, l, m, K, rng)
 
     # Reuse the fitted means as storage for the new latent liabilities.
-    Y_new = K*beta
+    Y_new = K * beta
 
     # Resample liabilities from the half-line compatible with each observed outcome.
     for i in eachindex(Y_new)
         y_mu = Y_new[i]
         if signs[i] >= 0.0
-            Y_new[i] = rand(rng, truncated(Normal(y_mu, one(T)); lower=zero(T)))
+            Y_new[i] = rand(rng, truncated(Normal(y_mu, one(T)); lower = zero(T)))
         else
-            Y_new[i] = rand(rng, truncated(Normal(y_mu, one(T)); upper=zero(T)))
+            Y_new[i] = rand(rng, truncated(Normal(y_mu, one(T)); upper = zero(T)))
         end
     end
 
     # The feasible interval preserves all liability signs under the parameter-expanded shift.
     if shiftmv
-        sig=T(10)
+        sig = T(10)
         mu = rand(rng, Normal(zero(T), sig))
         Y_new .+= mu
         sqI1, YI1 = shift_terms!(qc, sc, Y_new)
-        tauup = (one(T)/sig*sig + sqI1)
-        sigup = one(T)/tauup
+        tauup = (one(T) / sig * sig + sqI1)
+        sigup = one(T) / tauup
         muup = YI1 * sigup
         lo = maximum(Y_new[findall(signs .< 0.0)])
         up = minimum(Y_new[findall(signs .> 0.0)])
-        mu_new = rand(rng, truncated(Normal(muup, sqrt(sigup)), lower=lo, upper=up))
+        mu_new = rand(rng, truncated(Normal(muup, sqrt(sigup)), lower = lo, upper = up))
         Y_new .-= mu_new
     end
 
@@ -312,7 +316,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     ps.c = c_new
     ps.r = r_new
 
-    updateSCache!(sc, ps)
+    return updateSCache!(sc, ps)
 end
 
 """
@@ -332,11 +336,11 @@ end
 # Shared draw preserves RNG ordering for both cached and stand-alone callers.
 function draw_Ysigma!(Y, shape, scale, ssq, rng)
     T = eltype(Y)
-    aup = T(shape) + T(length(Y))/T(2)
-    bup = T(scale) + T(ssq)/T(2)
+    aup = T(shape) + T(length(Y)) / T(2)
+    bup = T(scale) + T(ssq) / T(2)
 
     sigma = rand(rng, InverseGamma(aup, bup))
-    Y .*= one(T)/sqrt(sigma)
+    Y .*= one(T) / sqrt(sigma)
     return sigma
 end
 
@@ -356,21 +360,21 @@ function draw_betas(Y, r, c, mc, l, m, K, rng)
     Qinv = K'K
 
     # Add predictor prior precisions to the active fixed-effect block.
-    for i in 1:(l-1)
-        Qinv[i,i] += one(T)/c
+    for i in 1:(l - 1)
+        Qinv[i, i] += one(T) / c
     end
 
     # Use the separate intercept prior precision.
-    Qinv[l,l] += one(T)/mc
+    Qinv[l, l] += one(T) / mc
 
     # Add the shared random-effect prior precision.
-    for i in (l+1):(m+l)
-        Qinv[i,i] += one(T)/r
+    for i in (l + 1):(m + l)
+        Qinv[i, i] += one(T) / r
     end
 
     Qf = cholesky(Qinv)
-    beta_mu = Qf\(K'*Y)
-    eta = rand(rng, Normal(zero(T),one(T)), l+m)
+    beta_mu = Qf \ (K' * Y)
+    eta = rand(rng, Normal(zero(T), one(T)), l + m)
     beta = Qf.U \ eta + beta_mu
 
     return beta
@@ -409,7 +413,7 @@ function get_state(samp::ProbitBVSSampler)
     pips = samp.wTGSState.pips
     rates = samp.wTGSState.rates
     # Reciprocal total move rate is the weighted-TGS importance weight.
-    Z = 1.0/sum(rates)
+    Z = 1.0 / sum(rates)
 
     Y = copy(ps.Y)
     r = ps.r
@@ -431,14 +435,14 @@ function get_state(samp::ProbitBVSSampler)
     work = prepare_active!(qc, sc, c, mc)
     sigma = draw_Ysigma!(Y, shape, scale, work.ssq, rng)
     bs = draw_betas(Y, r, c, mc, l, m, K, rng)
-    beta = zeros(eltype(pips),size(pips,1))
+    beta = zeros(eltype(pips), size(pips, 1))
 
     # Expand active coefficients back into the full predictor coordinate system.
-    beta[qc.i1_set[1:(l-1)]] .= bs[1:(l-1)]
+    beta[qc.i1_set[1:(l - 1)]] .= bs[1:(l - 1)]
     icept = bs[l]
-    u = bs[(l+1):end]
+    u = bs[(l + 1):end]
 
-    return (γ=γ, pips=pips, icept=icept, beta=beta, u=u, Y=Y, sigma=sigma, r=r, c=c, Z=Z)
+    return (γ = γ, pips = pips, icept = icept, beta = beta, u = u, Y = Y, sigma = sigma, r = r, c = c, Z = Z)
 end
 
 """
@@ -473,7 +477,7 @@ parameters.
 - `scales`: Relative proposal scale for each variable.
 - `sums`, `sums_sq`: Stage-two moment accumulators.
 """
-mutable struct RWMAdaptor{T<:AbstractFloat}
+mutable struct RWMAdaptor{T <: AbstractFloat}
     stage_len::Int
     buffer_len::Int
     buffer_it::Int
@@ -499,12 +503,12 @@ The first two adaptation stages contain `stage_len` updates each. The third
 stage continues tuning the global step until the owning sampler ends
 adaptation.
 """
-RWMAdaptor(n_var::Int, stage_len::Int) = RWMAdaptor(Float64,n_var,stage_len)
+RWMAdaptor(n_var::Int, stage_len::Int) = RWMAdaptor(Float64, n_var, stage_len)
 
-function RWMAdaptor(::Type{T}, n_var::Int, stage_len::Int) where {T<:AbstractFloat}
+function RWMAdaptor(::Type{T}, n_var::Int, stage_len::Int) where {T <: AbstractFloat}
     isconcretetype(T) || throw(ArgumentError("adaptor element type must be concrete"))
-    buffer_len = div(stage_len,2)
-    RWMAdaptor(
+    buffer_len = div(stage_len, 2)
+    return RWMAdaptor(
         stage_len,
         buffer_len,
         0,
@@ -515,7 +519,8 @@ function RWMAdaptor(::Type{T}, n_var::Int, stage_len::Int) where {T<:AbstractFlo
         T(0.1),
         ones(T, n_var),
         zeros(T, n_var),
-        zeros(T, n_var))
+        zeros(T, n_var)
+    )
 end
 
 """
@@ -533,9 +538,9 @@ function adapt!(adaptor::RWMAdaptor{T}, state::AbstractVector{T}, acc::Int) wher
     adaptor.steps += 1
 
     # Stages 1 and 3 target acceptance; stage 2 estimates relative marginal scales.
-    if adaptor.stage == 1 || adaptor.stage ==3
+    if adaptor.stage == 1 || adaptor.stage == 3
         accr = T(adaptor.n_acc) / T(adaptor.buffer_it)
-        adaptor.dt = max(adaptor.dt + one(T)*(accr - T(0.22))/sqrt(T(adaptor.steps)), T(0.001))
+        adaptor.dt = max(adaptor.dt + one(T) * (accr - T(0.22)) / sqrt(T(adaptor.steps)), T(0.001))
     else
         adaptor.sums_sq .+= state .* state
         adaptor.sums .+= state
@@ -547,14 +552,14 @@ function adapt!(adaptor::RWMAdaptor{T}, state::AbstractVector{T}, acc::Int) wher
         adaptor.buffer_it = div(adaptor.buffer_it, 2)
     end
 
-    if adaptor.steps >= adaptor.stage_len && adaptor.stage < 3
+    return if adaptor.steps >= adaptor.stage_len && adaptor.stage < 3
         if adaptor.stage == 2
             n = adaptor.steps
-            n2 = n*n
-            var = adaptor.sums_sq./n .- (adaptor.sums .* adaptor.sums)./n2
-            adaptor.scales .= sqrt.(var) .+ T(1e-6)
+            n2 = n * n
+            var = adaptor.sums_sq ./ n .- (adaptor.sums .* adaptor.sums) ./ n2
+            adaptor.scales .= sqrt.(var) .+ T(1.0e-6)
             adaptor.scales ./= maximum(adaptor.scales)
-            adaptor.scales .= max.(adaptor.scales, T(1e-3))
+            adaptor.scales .= max.(adaptor.scales, T(1.0e-3))
         end
 
         adaptor.sums .= 0.0

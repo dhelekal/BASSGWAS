@@ -57,112 +57,116 @@ mutable struct QCache{T}
     p::Int
     generation::UInt
     cov_generation::UInt
-    cov_source::Union{Nothing,CovarianceState{T}}
+    cov_source::Union{Nothing, CovarianceState{T}}
     work::ActiveWorkspace{T}
 end
 
-Base.propertynames(qc::QCache, private::Bool=false) = (fieldnames(typeof(qc))..., :X1, :XtX)
+Base.propertynames(qc::QCache, private::Bool = false) = (fieldnames(typeof(qc))..., :X1, :XtX)
 
 @inline function Base.getproperty(qc::QCache, name::Symbol)
     if name === :X1
-        return view(getfield(qc,:xdata),:,1:getfield(qc,:d))
+        return view(getfield(qc, :xdata), :, 1:getfield(qc, :d))
     elseif name === :XtX
-        return view(getfield(qc,:xtxdata),1:getfield(qc,:d),:)
+        return view(getfield(qc, :xtxdata), 1:getfield(qc, :d), :)
     end
-    return getfield(qc,name)
+    return getfield(qc, name)
 end
 
 get_X1(qc::QCache) = qc.X1
 get_XtX(qc::QCache) = qc.XtX
 
 function QCache(ps::ParState2{T}, i1_set, i0_set) where {T}
-    d, paug, n, ns = length(i1_set),size(ps.Xaug,2),size(ps.Xaug,1),length(ps.S)
-    allocated_model_size = max(4,d)
-    qc = QCache(collect(Int,i1_set),collect(Int,i0_set),zeros(T,n,allocated_model_size),
-        zeros(T,allocated_model_size,paug),zeros(T,allocated_model_size,paug),fill(false,allocated_model_size),d,length(i0_set),
-        UInt(1),UInt(0),nothing,ActiveWorkspace(T,n,ns,allocated_model_size))
-    
+    d, paug, n, ns = length(i1_set), size(ps.Xaug, 2), size(ps.Xaug, 1), length(ps.S)
+    allocated_model_size = max(4, d)
+    qc = QCache(
+        collect(Int, i1_set), collect(Int, i0_set), zeros(T, n, allocated_model_size),
+        zeros(T, allocated_model_size, paug), zeros(T, allocated_model_size, paug), fill(false, allocated_model_size), d, length(i0_set),
+        UInt(1), UInt(0), nothing, ActiveWorkspace(T, n, ns, allocated_model_size)
+    )
+
     for j in 1:d
-        copyto!(view(qc.xdata,:,j),view(ps.Xaug,:,i1_set[j]))
+        copyto!(view(qc.xdata, :, j), view(ps.Xaug, :, i1_set[j]))
     end
 
-    mul!(get_XtX(qc),transpose(get_X1(qc)),ps.Xaug)
+    mul!(get_XtX(qc), transpose(get_X1(qc)), ps.Xaug)
 
     return qc
 end
 
 function _reserve_active!(qc, needed)
-    allocated_model_size = size(qc.xdata,2)
+    allocated_model_size = size(qc.xdata, 2)
     needed <= allocated_model_size && return nothing
-    allocated_model_size = max(needed,2allocated_model_size)
+    allocated_model_size = max(needed, 2allocated_model_size)
     T = eltype(qc.xdata)
-    xdata = zeros(T,size(qc.xdata,1),allocated_model_size)
-    xtxdata = zeros(T,allocated_model_size,size(qc.xtxdata,2))
+    xdata = zeros(T, size(qc.xdata, 1), allocated_model_size)
+    xtxdata = zeros(T, allocated_model_size, size(qc.xtxdata, 2))
     covdata = similar(xtxdata)
 
-    copyto!(view(xdata,:,1:qc.d),get_X1(qc))
-    copyto!(view(xtxdata,1:qc.d,:),get_XtX(qc))
-    copyto!(view(covdata,1:qc.d,:),view(qc.covdata,1:qc.d,:))
+    copyto!(view(xdata, :, 1:qc.d), get_X1(qc))
+    copyto!(view(xtxdata, 1:qc.d, :), get_XtX(qc))
+    copyto!(view(covdata, 1:qc.d, :), view(qc.covdata, 1:qc.d, :))
 
-    resize!(qc.validrows,allocated_model_size)
-    fill!(view(qc.validrows,(qc.d+1):allocated_model_size),false)
-    
-    qc.xdata, qc.xtxdata, qc.covdata = xdata,xtxdata,covdata
-    qc.work = ActiveWorkspace(T,size(xdata,1),size(qc.work.qactive,1),allocated_model_size)
+    resize!(qc.validrows, allocated_model_size)
+    fill!(view(qc.validrows, (qc.d + 1):allocated_model_size), false)
+
+    qc.xdata, qc.xtxdata, qc.covdata = xdata, xtxdata, covdata
+    qc.work = ActiveWorkspace(T, size(xdata, 1), size(qc.work.qactive, 1), allocated_model_size)
     return nothing
 end
 
 """Insert one raw cross-product row; defer its covariance product until synchronization."""
 function add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
-    
+
     old = qc.d
-    _reserve_active!(qc,old+1)
-    pos = searchsortedfirst(i1_set_new,index)
+    _reserve_active!(qc, old + 1)
+    pos = searchsortedfirst(i1_set_new, index)
     #Move columns past insertion position by one
-    
-    @inbounds for j in axes(qc.xtxdata,2), i in old:-1:pos
-        qc.xtxdata[i+1,j] = qc.xtxdata[i,j]
-        qc.covdata[i+1,j] = qc.covdata[i,j]
+
+    @inbounds for j in axes(qc.xtxdata, 2), i in old:-1:pos
+        qc.xtxdata[i + 1, j] = qc.xtxdata[i, j]
+        qc.covdata[i + 1, j] = qc.covdata[i, j]
     end
 
     for i in old:-1:pos
-        copyto!(view(qc.xdata,:,i+1),view(qc.xdata,:,i))
-        qc.validrows[i+1] = qc.validrows[i]
+        copyto!(view(qc.xdata, :, i + 1), view(qc.xdata, :, i))
+        qc.validrows[i + 1] = qc.validrows[i]
     end
 
     #Insert new column
-    copyto!(view(qc.xdata,:,pos),view(ps.Xaug,:,index))
+    copyto!(view(qc.xdata, :, pos), view(ps.Xaug, :, index))
 
     #Update Column dot products
-    _column_dots!(view(qc.xtxdata, pos, :), 
-        ps.Xaug, 
-        view(ps.Xaug, :, index), 
-        one(eltype(qc.xtxdata)), 
-        zero(eltype(qc.xtxdata)))
-    
+    _column_dots!(
+        view(qc.xtxdata, pos, :),
+        ps.Xaug,
+        view(ps.Xaug, :, index),
+        one(eltype(qc.xtxdata)),
+        zero(eltype(qc.xtxdata))
+    )
+
     qc.validrows[pos] = false
-    qc.d, qc.p = old+1,length(i0_set_new)
-    qc.i1_set, qc.i0_set = i1_set_new,i0_set_new
+    qc.d, qc.p = old + 1, length(i0_set_new)
+    qc.i1_set, qc.i0_set = i1_set_new, i0_set_new
     qc.generation += UInt(1)
     return nothing
 end
 
 """Remove one row without recalculating either raw or covariance-adjusted products."""
 function remove_active_QC(qc, ps, index, i1_set_new, i0_set_new)
-    pos, old = searchsortedfirst(qc.i1_set,index),qc.d
-    
-    @inbounds for j in axes(qc.xtxdata,2), i in pos:(old-1)
-        qc.xtxdata[i,j] = qc.xtxdata[i+1,j]
-        qc.covdata[i,j] = qc.covdata[i+1,j]
+    pos, old = searchsortedfirst(qc.i1_set, index), qc.d
+
+    @inbounds for j in axes(qc.xtxdata, 2), i in pos:(old - 1)
+        qc.xtxdata[i, j] = qc.xtxdata[i + 1, j]
+        qc.covdata[i, j] = qc.covdata[i + 1, j]
     end
 
-    for i in pos:(old-1)
-        copyto!(view(qc.xdata,:,i),view(qc.xdata,:,i+1))
-        qc.validrows[i] = qc.validrows[i+1]
+    for i in pos:(old - 1)
+        copyto!(view(qc.xdata, :, i), view(qc.xdata, :, i + 1))
+        qc.validrows[i] = qc.validrows[i + 1]
     end
 
-    qc.d, qc.p = old-1,length(i0_set_new)
-    qc.i1_set, qc.i0_set = i1_set_new,i0_set_new
+    qc.d, qc.p = old - 1, length(i0_set_new)
+    qc.i1_set, qc.i0_set = i1_set_new, i0_set_new
     qc.generation += UInt(1)
 
     return nothing
