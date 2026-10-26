@@ -78,6 +78,7 @@ get_XtX(qc::QCache) = qc.XtX
 function QCache(ps::ParState2{T}, i1_set, i0_set) where {T}
     d, paug, n, ns = length(i1_set), size(ps.Xaug, 2), size(ps.Xaug, 1), length(ps.S)
     allocated_model_size = max(4, d)
+
     qc = QCache(
         collect(Int, i1_set), collect(Int, i0_set), zeros(T, n, allocated_model_size),
         zeros(T, allocated_model_size, paug), zeros(T, allocated_model_size, paug), fill(false, allocated_model_size), d, length(i0_set),
@@ -97,7 +98,9 @@ function _reserve_active!(qc, needed)
     allocated_model_size = size(qc.xdata, 2)
     needed <= allocated_model_size && return nothing
     allocated_model_size = max(needed, 2allocated_model_size)
+
     T = eltype(qc.xdata)
+
     xdata = zeros(T, size(qc.xdata, 1), allocated_model_size)
     xtxdata = zeros(T, allocated_model_size, size(qc.xtxdata, 2))
     covdata = similar(xtxdata)

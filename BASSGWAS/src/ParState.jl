@@ -48,20 +48,27 @@ mutable struct ParState2{T <: AbstractFloat}
             Xaug, Y, U, S, p::Integer, n::Integer,
             alpha, beta, c, r, s, mc
         ) where {T <: AbstractFloat}
+
         isconcretetype(T) || throw(ArgumentError("state element type must be concrete"))
+
         Xaug, Y = convert(Matrix{T}, Xaug), convert(Vector{T}, Y)
         U, S = convert(Matrix{T}, U), convert(Vector{T}, S)
         alpha, beta, c, r, s, mc = T.((alpha, beta, c, r, s, mc))
+
         n > 0 && p >= 0 && size(Xaug) == (n, p + 1) && length(Y) == n &&
             size(U) == (n, length(S)) && length(S) <= n ||
             throw(DimensionMismatch("design, response, eigenbasis and counts must agree"))
+
         all(isfinite, Xaug) && all(isfinite, Y) && all(isfinite, U) ||
             throw(ArgumentError("design, response and eigenvectors must be finite"))
+
         all(x -> isfinite(x) && x >= 0, S) ||
             throw(ArgumentError("eigenvalues must be finite and nonnegative"))
+
         for (name, value) in (("alpha", alpha), ("beta", beta), ("c", c), ("r", r), ("s", s), ("mc", mc))
             isfinite(value) && value > 0 || throw(ArgumentError("$name must be finite and positive"))
         end
+
         return new{T}(Xaug, Y, U, S, p, n, alpha, beta, c, r, s, mc)
     end
 end
