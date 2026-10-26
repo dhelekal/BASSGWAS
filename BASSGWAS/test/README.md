@@ -10,6 +10,26 @@ julia --project=. --startup-file=no --threads=4 test/runtests.jl
 The enclosing testset allows all groups to run
 even if a regression fails. No checks are marked broken or skipped.
 
+## Block task execution
+
+`block_tasks_tests.jl` checks contiguous, exactly-once block coverage, partial
+blocks, logical worker indices, worker-owned scratch, deterministic failure
+selection and per-worker stopping. It also checks independent concurrent
+runners, preserved matrix and view types for BLAS dispatch, argument
+validation, and status allocations bounded by worker count. A three-thread
+run exercises uneven partitions.
+Candidate failure tests in `workspace_tests.jl` cover different worker ranges,
+multiple failures, and recovery with single- and multi-threaded BLAS settings.
+
+## Floating-point state storage
+
+`state_type_tests.jl` checks `ParState2{Float64}` and `wTGSState2{Float64}`
+construction from mixed integer, rational and Float64 inputs, explicit type
+selection, dense conversion of views, shared cache inputs, and invalid shapes
+and parameter values. Complete Float64 sampler transitions exercise both
+sampled and fixed coefficient-prior variance and all adaptation stages.
+Float32 numerical validation is intentionally deferred.
+
 ## Independent numerical references
 
 `numerical_helpers.jl` enumerates every inclusion vector for one to four
@@ -38,3 +58,18 @@ quadratic forms and cloned RNGs to verify the inverse-gamma draw and liability
 rescaling. These two draw routines assume unit residual variance. Deterministic
 comparisons use `rtol=1e-8` and `atol=1e-10` (normalization checks use the stated
 absolute tolerance).
+## Dependency caches and reusable workspaces
+
+`workspace_tests.jl` checks independent response/covariance invalidation,
+zero and near-zero eigenvalues, empty and rank-one bases, guarded weight
+arithmetic, proposal isolation, and conditional response forms. A long model
+walk forces growth in allocated model size and compares incremental covariance-adjusted
+products with dense reconstruction after additions, removals, and variance
+changes. Allocation checks warm each workspace before measuring and exclude
+predictor-sized temporary arrays. Independent sampler instances are also run
+concurrently with separate RNGs and compared with serial execution.
+
+`SCache` no longer stores `F = Y'C^-1`; cache checks instead validate the
+covariance-adjusted design diagonal against the independent dense precision.
+Timing benchmarks are separate from correctness tests; see
+[`../benchmark/README.md`](../benchmark/README.md).

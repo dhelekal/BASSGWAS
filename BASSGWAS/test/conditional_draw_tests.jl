@@ -7,7 +7,7 @@ include("numerical_helpers.jl")
     for rank in (3, 8), mask in (0, 5, 15)
         @testset "rank=$rank model=$mask" begin
             # draw_betas and draw_Ysigma! conditionals use unit residual variance.
-            ps = numerical_fixture(4; rank, s=1.0)
+            ps = numerical_fixture(4; rank, s = 1.0)
             gamma = inclusion_vector(mask, ps.p)
             X = ps.Xaug[:, [findall(==(1), gamma); ps.p + 1]]
             K = [X ps.U * Diagonal(sqrt.(ps.S))]
@@ -32,7 +32,7 @@ include("numerical_helpers.jl")
             # Whitening exposes errors in every covariance direction, including
             # correlations; tolerances are six analytic Monte Carlo SEs.
             standardized = L \ (draws .- posterior_mean)
-            mean_z = vec(sum(standardized; dims=2)) / N
+            mean_z = vec(sum(standardized; dims = 2)) / N
             centered = standardized .- mean_z
             cov_z = centered * centered' / (N - 1)
             @test all(abs.(mean_z) .<= 6 / sqrt(N))
@@ -48,7 +48,7 @@ end
 @testset "Inverse-gamma residual variance conditional" begin
     for rank in (3, 8), mask in 0:15, (shape, scale) in ((2.5, 0.8), (6.0, 1.7))
         @testset "rank=$rank model=$mask shape=$shape scale=$scale" begin
-            ps = numerical_fixture(4; rank, s=1.0)
+            ps = numerical_fixture(4; rank, s = 1.0)
             gamma = inclusion_vector(mask, ps.p)
             X = ps.Xaug[:, [findall(==(1), gamma); ps.p + 1]]
             dense = dense_model_terms(ps, gamma)
@@ -58,10 +58,12 @@ end
             for _ in 1:3
                 expected_sigma = rand(expected_rng, conditional)
                 Y = copy(ps.Y)
-                sigma = BASSGWAS.draw_Ysigma!(Y, ps.r, ps.c, ps.mc, shape, scale,
-                    X, X' * X, ps.U' * X, ps.U, ps.S, actual_rng)
-                @test isapprox(sigma, expected_sigma; rtol=NUM_RTOL, atol=NUM_ATOL)
-                @test isapprox(Y, ps.Y / sqrt(expected_sigma); rtol=NUM_RTOL, atol=NUM_ATOL)
+                sigma = BASSGWAS.draw_Ysigma!(
+                    Y, ps.r, ps.c, ps.mc, shape, scale,
+                    X, X' * X, ps.U' * X, ps.U, ps.S, actual_rng
+                )
+                @test isapprox(sigma, expected_sigma; rtol = NUM_RTOL, atol = NUM_ATOL)
+                @test isapprox(Y, ps.Y / sqrt(expected_sigma); rtol = NUM_RTOL, atol = NUM_ATOL)
                 @test isfinite(sigma) && sigma > 0
                 @test sign.(Y) == sign.(ps.Y)
             end
