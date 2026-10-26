@@ -58,7 +58,10 @@ end
 Evaluate the collapsed log likelihood for log-determinant `det` and quadratic
 form `ssq`, omitting constants shared by all models.
 """
-@inline (x::TDistLogLik{T})(det::T, ssq::T) where {T} = -(one(T) / 2) * det - (one(T) / 2) * (x.nu + x.n) * log(x.nu * x.lambda + ssq)
+@inline function (x::TDistLogLik{T})(det::T, ssq::T) where {T}
+    half_t = one(T) / 2
+    return -half_t * det - half_t * (x.nu + x.n) * log(x.nu * x.lambda + ssq)
+end
 
 """
     ll_plus_a!(ll, det, ssq, a, x::TDistLogLik)
@@ -70,8 +73,9 @@ function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::Abstract
     nu = x.nu
     n = x.n
     lambda = x.lambda
+    half_t = one(T) / 2
     return @turbo for i in axes(ll, 1)
-        ll[i] = -(one(T) / 2) * det[i] - (one(T) / 2) * (nu + n) * log(nu * lambda + ssq[i]) + a
+        ll[i] = -half_t * det[i] - half_t * (nu + n) * log(nu * lambda + ssq[i]) + a
     end
 end
 
@@ -89,7 +93,10 @@ struct StdNormLogLik{T <: AbstractFloat} <: Aloglik{T} end
 Evaluate the standard-normal log likelihood for log-determinant `det` and
 quadratic form `ssq`, omitting constants shared by all models.
 """
-(x::StdNormLogLik{T})(det::T, ssq::T) where {T} = -(one(T) / 2) * det - (one(T) / 2) * ssq
+function (x::StdNormLogLik{T})(det::T, ssq::T) where {T}
+    half_t = one(T) / 2
+    return -half_t * det - half_t * ssq
+end
 
 """
     ll_plus_a!(ll, det, ssq, a, x::StdNormLogLik)
@@ -98,7 +105,8 @@ Fill `ll` with the elementwise standard-normal log likelihood for `det` and
 `ssq`, adding the constant `a` to every result.
 """
 function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::StdNormLogLik{T}) where {T <: AbstractFloat}
+    half_t = one(T) / 2
     return @turbo for i in axes(ll, 1)
-        ll[i] = -(one(T) / 2) * det[i] - (one(T) / 2) * ssq[i] + a
+        ll[i] = -half_t * det[i] - half_t * ssq[i] + a
     end
 end

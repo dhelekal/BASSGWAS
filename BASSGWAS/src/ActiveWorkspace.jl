@@ -79,10 +79,11 @@ mutable struct ProposalWorkspace{T}
 end
 
 function ProposalWorkspace(::Type{T}, n, k, a) where {T}
+    nan_t, zero_t = T(NaN), zero(T)
     return ProposalWorkspace(
         zeros(T, a, a), zeros(T, k, a), zeros(T, k, a), zeros(T, a, a),
         zeros(T, k), zeros(T, k), zeros(T, k), zeros(T, k), zeros(T, a), zeros(T, a),
-        zeros(T, k), zeros(T, n), typemax(UInt), typemax(UInt), T(NaN), T(NaN), T(NaN), T(NaN), zero(T), zero(T)
+        zeros(T, k), zeros(T, n), typemax(UInt), typemax(UInt), nan_t, nan_t, nan_t, nan_t, zero_t, zero_t
     )
 end
 
@@ -138,10 +139,11 @@ mutable struct ActiveWorkspace{T}
 end
 
 function ActiveWorkspace(::Type{T}, n, k, a) where {T}
+    nan_t, zero_t = T(NaN), zero(T)
     return ActiveWorkspace(
         zeros(T, k, a), zeros(T, a, a), zeros(T, a, a), zeros(T, a), zeros(T, a), zeros(T, a),
         [zeros(T, a, CACHE_BLOCK_COLUMNS) for _ in 1:Threads.nthreads()],
-        (typemax(UInt), typemax(UInt), T(NaN), T(NaN)), typemax(UInt), zero(T), zero(T),
+        (typemax(UInt), typemax(UInt), nan_t, nan_t), typemax(UInt), zero_t, zero_t,
         ProposalWorkspace(T, n, k, a)
     )
 end
@@ -169,6 +171,7 @@ end
 """Synchronize G = X_active' C^-1 X, preserving valid rows across model flips."""
 function sync_active_products!(qc, sc)
     covariance = sc.covariance
+    nan_t = typeof(covariance.r)(NaN)
     if qc.cov_source !== covariance || qc.cov_generation != covariance.generation
 
         paug = sc.paug
@@ -187,7 +190,7 @@ function sync_active_products!(qc, sc)
         fill!(qc.validrows, true)
         qc.cov_generation = covariance.generation
         qc.cov_source = covariance
-        qc.work.factor_key = (typemax(UInt), typemax(UInt), typeof(covariance.r)(NaN), typeof(covariance.r)(NaN))
+        qc.work.factor_key = (typemax(UInt), typemax(UInt), nan_t, nan_t)
     else
         for i in 1:qc.d
             if !qc.validrows[i]
@@ -211,12 +214,14 @@ function prepare_active!(qc, sc, c, mc)
     _positive_variance(mc, "mc")
     sync_active_products!(qc, sc)
     work, d = qc.work, qc.d
+    T = eltype(work.invlower)
+    nan_t, zero_t = T(NaN), zero(T)
     factor_key = (qc.generation, sc.covariance.generation, c, mc)
     factor = view(work.factor, 1:d, 1:d)
 
     if work.factor_key != factor_key
         # A failed factorization must never leave an old factor_key on modified storage.
-        work.factor_key = (typemax(UInt), typemax(UInt), typeof(work.det)(NaN), typeof(work.det)(NaN))
+        work.factor_key = (typemax(UInt), typemax(UInt), nan_t, nan_t)
 
         @inbounds for j in 1:d
             copyto!(view(factor, :, j), view(qc.covdata, 1:d, qc.i1_set[j]))
@@ -234,16 +239,16 @@ function prepare_active!(qc, sc, c, mc)
         end
 
         invlower = view(work.invlower, 1:d, 1:d)
-        fill!(invlower, zero(eltype(invlower)))
+        fill!(invlower, zero_t)
 
         for i in 1:d
-            invlower[i, i] = one(eltype(invlower))
+            invlower[i, i] = one(T)
         end
 
         ldiv!(LowerTriangular(factor), invlower)
 
         @inbounds for j in 1:d
-            h = zero(eltype(invlower))
+            h = zero_t
 
             @simd for i in 1:d
                 h += abs2(invlower[i, j])
@@ -272,6 +277,7 @@ end
 function _candidate_block!(data, lo, hi, worker)
     (; dets, ssq, qc, sc, c) = data
     work, d = qc.work, qc.d
+    zero_t = zero(c)
     # Scratch belongs to logical workers, independent of task migration/thread IDs.
     buffer = work.blocks[worker]
     block = view(buffer, 1:d, 1:(hi - lo + 1))
@@ -279,7 +285,7 @@ function _candidate_block!(data, lo, hi, worker)
     ldiv!(LowerTriangular(view(work.factor, 1:d, 1:d)), block)
     cinv, lc = inv(c), log(c)
     @inbounds for j in axes(block, 2)
-        normb, uy = zero(c), zero(c)
+        normb, uy = zero_t, zero_t
         @simd for i in 1:d
             x = block[i, j]
             normb += x * x
@@ -400,6 +406,7 @@ Intercept projections come from fixed design products. Only Y is projected.
 """
 function shift_terms!(qc, sc, Y)
     proposal, d = qc.work.proposal, qc.d
+    one_t = one(proposal.s)
     fx, ones_fx = view(proposal.fx, 1:d), view(proposal.ones_fx, 1:d)
 
     if sc.ns > 0
@@ -418,11 +425,11 @@ function shift_terms!(qc, sc, Y)
     end
 
     if sc.ns > 0
-        mul!(fx, transpose(view(proposal.utx, :, 1:d)), proposal.weighted_y, -one(proposal.s), inv(proposal.s))
+        mul!(fx, transpose(view(proposal.utx, :, 1:d)), proposal.weighted_y, -one_t, inv(proposal.s))
         @inbounds for i in 1:sc.ns
             proposal.weighted_y[i] = proposal.d2[i] * sc.UtX[i, sc.paug]
         end
-        mul!(ones_fx, transpose(view(proposal.utx, :, 1:d)), proposal.weighted_y, -one(proposal.s), inv(proposal.s))
+        mul!(ones_fx, transpose(view(proposal.utx, :, 1:d)), proposal.weighted_y, -one_t, inv(proposal.s))
     else
         fx ./= proposal.s
         ones_fx ./= proposal.s
@@ -438,17 +445,18 @@ end
 """Quadratic form of a new response under the already prepared proposal factor."""
 function response_ssq!(qc, sc, Y)
     proposal, d = qc.work.proposal, qc.d
+    one_t = one(proposal.s)
     fx = view(proposal.fx, 1:d)
     mul!(fx, transpose(get_X1(qc)), Y)
     copyto!(proposal.residual, Y)
 
     if sc.ns > 0
         mul!(proposal.yu, transpose(sc.U), Y)
-        mul!(proposal.residual, sc.U, proposal.yu, -one(proposal.s), one(proposal.s))
+        mul!(proposal.residual, sc.U, proposal.yu, -one_t, one_t)
         @inbounds @simd for i in 1:sc.ns
             proposal.weighted_y[i] = proposal.d2[i] * proposal.yu[i]
         end
-        mul!(fx, transpose(view(proposal.utx, :, 1:d)), proposal.weighted_y, -one(proposal.s), inv(proposal.s))
+        mul!(fx, transpose(view(proposal.utx, :, 1:d)), proposal.weighted_y, -one_t, inv(proposal.s))
     else
         fx ./= proposal.s
     end

@@ -617,11 +617,12 @@ The method reuses active-design and low-rank cross-products and returns
 `(ssq, det)`. Residual variance is fixed at one.
 """
 function _comp_llterms(Y, r, c, mc, X, XtX, UtX, YtU, S)
+    one_t = one(r)
     d = similar(S)
 
     k = size(X, 2)
 
-    _comp_d!(d, S, r, one(r))
+    _comp_d!(d, S, r, one_t)
 
     D = Diagonal(d)
     Fl = D * YtU'
@@ -643,7 +644,7 @@ function _comp_llterms(Y, r, c, mc, X, XtX, UtX, YtU, S)
 
     # Stand-alone compatibility path; the sampler uses proposal_terms! and
     # retains all of this workspace across proposals.
-    cdet = _covariance_weights!(d, similar(d), similar(d), S, r, one(r), size(X, 1))
+    cdet = _covariance_weights!(d, similar(d), similar(d), S, r, one_t, size(X, 1))
 
     det_curr = 2.0 * logabsdet(Atr)[1]
     det_curr += cdet + (k - 1) * log(c) + log(mc)

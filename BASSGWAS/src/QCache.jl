@@ -120,6 +120,7 @@ end
 """Insert one raw cross-product row; defer its covariance product until synchronization."""
 function add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
 
+    T = eltype(qc.xtxdata)
     old = qc.d
     _reserve_active!(qc, old + 1)
     pos = searchsortedfirst(i1_set_new, index)
@@ -143,8 +144,8 @@ function add_active_QC(qc, ps, index, i1_set_new, i0_set_new)
         view(qc.xtxdata, pos, :),
         ps.Xaug,
         view(ps.Xaug, :, index),
-        one(eltype(qc.xtxdata)),
-        zero(eltype(qc.xtxdata))
+        one(T),
+        zero(T)
     )
 
     qc.validrows[pos] = false

@@ -99,6 +99,8 @@ function ProbitBVSSampler(
         typeof(c), typeof(mcinit), typeof(eps), typeof(xi_init),
         typeof(xi_targ), typeof(nu), typeof(lambda)
     )
+    one_t = one(T)
+    initial_floor = T(1.0e-8)
     alpha, beta, nu, lambda, eps, xi_init, xi_targ = T.((alpha, beta, nu, lambda, eps, xi_init, xi_targ))
     p = size(X, 2)
     n = size(Y, 1)
@@ -111,12 +113,12 @@ function ProbitBVSSampler(
     loglik = TDistLogLik{T}(nu, lambda, n)
 
     # Initialize latent liabilities on the side of zero fixed by each binary outcome.
-    signs = ifelse.(Y .> 0, one(T), -one(T))
+    signs = ifelse.(Y .> 0, one_t, -one_t)
     Yinit = abs.(randn(rng, T, n)) .* signs
-    rinit = abs(randn(rng, T)) + T(1.0e-8)
-    cinit = sample_c ? abs(randn(rng, T)) + T(1.0e-8) : T(c)
+    rinit = abs(randn(rng, T)) + initial_floor
+    cinit = sample_c ? abs(randn(rng, T)) + initial_floor : T(c)
 
-    sinit = one(T)
+    sinit = one_t
 
     parState = ParState2{T}(X, Yinit, U, S, alpha, beta, cinit, rinit, sinit, mcinit)
     cache = makeSCache(parState)
@@ -192,6 +194,8 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     scale = samp.scale
 
     T = eltype(ps.Y)
+    one_t, zero_t = one(T), zero(T)
+    proposal_floor = T(1.0e-4)
     Y = ps.Y
     r = ps.r
     c = ps.c
@@ -207,7 +211,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     ll_curr = samp.wTGSState.ll_curr
 
     rprior = Exponential(-T(3) / log(T(0.05)))
-    cprior = truncated(InverseGamma(T(6), T(12)); lower = zero(T))
+    cprior = truncated(InverseGamma(T(6), T(12)); lower = zero_t)
 
     adaptor = samp.adaptor
 
@@ -218,12 +222,12 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         rwm_scales = get_scales(adaptor)
 
         # Reflective jitter keeps the proposed standard deviation positive.
-        rprop = abs(rsqrt + i * randn(rng, T) * dt * rwm_scales[1] - T(1.0e-4)) + T(1.0e-4)
+        rprop = abs(rsqrt + i * randn(rng, T) * dt * rwm_scales[1] - proposal_floor) + proposal_floor
         cprop = csqrt
 
         if samp.sample_c
             # Apply the same positive-scale safeguard to the predictor effect.
-            cprop = abs(csqrt + i * randn(rng, T) * dt * rwm_scales[2] - T(1.0e-4)) + T(1.0e-4)
+            cprop = abs(csqrt + i * randn(rng, T) * dt * rwm_scales[2] - proposal_floor) + proposal_floor
         end
 
         prll_curr = logpdf(rprior, rsqrt) + logpdf(cprior, csqrt)
@@ -281,20 +285,20 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     for i in eachindex(Y_new)
         y_mu = Y_new[i]
         if signs[i] >= 0.0
-            Y_new[i] = rand(rng, truncated(Normal(y_mu, one(T)); lower = zero(T)))
+            Y_new[i] = rand(rng, truncated(Normal(y_mu, one_t); lower = zero_t))
         else
-            Y_new[i] = rand(rng, truncated(Normal(y_mu, one(T)); upper = zero(T)))
+            Y_new[i] = rand(rng, truncated(Normal(y_mu, one_t); upper = zero_t))
         end
     end
 
     # The feasible interval preserves all liability signs under the parameter-expanded shift.
     if shiftmv
         sig = T(10)
-        mu = rand(rng, Normal(zero(T), sig))
+        mu = rand(rng, Normal(zero_t, sig))
         Y_new .+= mu
         sqI1, YI1 = shift_terms!(qc, sc, Y_new)
-        tauup = (one(T) / sig * sig + sqI1)
-        sigup = one(T) / tauup
+        tauup = (one_t / sig * sig + sqI1)
+        sigup = one_t / tauup
         muup = YI1 * sigup
         lo = maximum(Y_new[findall(signs .< 0.0)])
         up = minimum(Y_new[findall(signs .> 0.0)])
@@ -336,8 +340,9 @@ end
 # Shared draw preserves RNG ordering for both cached and stand-alone callers.
 function draw_Ysigma!(Y, shape, scale, ssq, rng)
     T = eltype(Y)
-    aup = T(shape) + T(length(Y)) / T(2)
-    bup = T(scale) + T(ssq) / T(2)
+    two_t = T(2)
+    aup = T(shape) + T(length(Y)) / two_t
+    bup = T(scale) + T(ssq) / two_t
 
     sigma = rand(rng, InverseGamma(aup, bup))
     Y .*= one(T) / sqrt(sigma)
@@ -357,24 +362,25 @@ returned vector follows that same order and advances `rng`.
 function draw_betas(Y, r, c, mc, l, m, K, rng)
 
     T = eltype(K)
+    one_t = one(T)
     Qinv = K'K
 
     # Add predictor prior precisions to the active fixed-effect block.
     for i in 1:(l - 1)
-        Qinv[i, i] += one(T) / c
+        Qinv[i, i] += one_t / c
     end
 
     # Use the separate intercept prior precision.
-    Qinv[l, l] += one(T) / mc
+    Qinv[l, l] += one_t / mc
 
     # Add the shared random-effect prior precision.
     for i in (l + 1):(m + l)
-        Qinv[i, i] += one(T) / r
+        Qinv[i, i] += one_t / r
     end
 
     Qf = cholesky(Qinv)
     beta_mu = Qf \ (K' * Y)
-    eta = rand(rng, Normal(zero(T), one(T)), l + m)
+    eta = rand(rng, Normal(zero(T), one_t), l + m)
     beta = Qf.U \ eta + beta_mu
 
     return beta
@@ -533,6 +539,7 @@ The adaptor is mutated in place. During the middle stage, empirical variances
 set normalized relative proposal scales with a small positive floor.
 """
 function adapt!(adaptor::RWMAdaptor{T}, state::AbstractVector{T}, acc::Int) where {T}
+    adaptation_floor = T(0.001)
     adaptor.buffer_it += 1
     adaptor.n_acc += acc
     adaptor.steps += 1
@@ -540,7 +547,7 @@ function adapt!(adaptor::RWMAdaptor{T}, state::AbstractVector{T}, acc::Int) wher
     # Stages 1 and 3 target acceptance; stage 2 estimates relative marginal scales.
     if adaptor.stage == 1 || adaptor.stage == 3
         accr = T(adaptor.n_acc) / T(adaptor.buffer_it)
-        adaptor.dt = max(adaptor.dt + one(T) * (accr - T(0.22)) / sqrt(T(adaptor.steps)), T(0.001))
+        adaptor.dt = max(adaptor.dt + one(T) * (accr - T(0.22)) / sqrt(T(adaptor.steps)), adaptation_floor)
     else
         adaptor.sums_sq .+= state .* state
         adaptor.sums .+= state
@@ -559,7 +566,7 @@ function adapt!(adaptor::RWMAdaptor{T}, state::AbstractVector{T}, acc::Int) wher
             var = adaptor.sums_sq ./ n .- (adaptor.sums .* adaptor.sums) ./ n2
             adaptor.scales .= sqrt.(var) .+ T(1.0e-6)
             adaptor.scales ./= maximum(adaptor.scales)
-            adaptor.scales .= max.(adaptor.scales, T(1.0e-3))
+            adaptor.scales .= max.(adaptor.scales, adaptation_floor)
         end
 
         adaptor.sums .= 0.0

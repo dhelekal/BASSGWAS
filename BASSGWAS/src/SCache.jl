@@ -133,9 +133,10 @@ zero marks the response quantities as uninitialized until the first refresh.
 """
 function ResponseState{T}(n::Integer, ns::Integer, paug::Integer) where {T <: AbstractFloat}
     isconcretetype(T) || throw(ArgumentError("response element type must be concrete"))
+    zero_t = zero(T)
     return ResponseState{T}(
-        zeros(T, ns), zeros(T, paug), zero(T), zero(T), zeros(T, ns),
-        zeros(T, n), zeros(T, paug), zero(T), UInt(0)
+        zeros(T, ns), zeros(T, paug), zero_t, zero_t, zeros(T, ns),
+        zeros(T, n), zeros(T, paug), zero_t, UInt(0)
     )
 end
 
@@ -235,9 +236,11 @@ end
 function _scaled_columns!(context, lo, hi, worker)
     (; covariance, data) = context
     QX, UtX, d = covariance.QX, data.UtX, covariance.d
+    T = eltype(QX)
+    zero_t = zero(T)
 
     @inbounds for j in lo:hi
-        q = zero(eltype(QX))
+        q = zero_t
 
         @simd for i in axes(QX, 1)
             v = d[i] * UtX[i, j]
@@ -248,8 +251,8 @@ function _scaled_columns!(context, lo, hi, worker)
         g = covariance.sinv * data.sqX[j] - q
         # Avoid catastrophic cancellation when the column is nearly entirely
         # explained by covariance modes with very large variance.
-        if g <= 64eps(eltype(QX)) * covariance.sinv * data.sqX[j]
-            g = zero(g)
+        if g <= 64eps(T) * covariance.sinv * data.sqX[j]
+            g = zero_t
 
             for row in axes(data.Xaug, 1)
                 v = data.Xaug[row, j]
@@ -273,9 +276,10 @@ end
 function _refresh_covariance!(sc, r, s)
 
     covariance, data = sc.covariance, sc.data
+    T = typeof(covariance.r)
     _positive_variance(r, "r")
     _positive_variance(s, "s")
-    r, s = convert(typeof(covariance.r), r), convert(typeof(covariance.s), s)
+    r, s = convert(T, r), convert(T, s)
 
     if covariance.generation != 0 && r == covariance.r && s == covariance.s
         return false
@@ -325,14 +329,16 @@ end
 """Refresh response projections and dependent terms, including in-place Y changes."""
 function update_response!(sc::SCache, Y)
     data, response = sc.data, sc.response
+    T = eltype(response.yx)
+    one_t = one(T)
     Y isa AbstractVector && length(Y) == data.n || throw(DimensionMismatch("response must be a vector of the original length"))
 
-    _column_dots!(response.yx, data.Xaug, Y, one(eltype(response.yx)), zero(eltype(response.yx)))
+    _column_dots!(response.yx, data.Xaug, Y, one_t, zero(T))
     copyto!(response.residual, Y)
 
     if data.ns > 0
         mul!(response.yu, transpose(data.U), Y)
-        mul!(response.residual, data.U, response.yu, -one(eltype(response.yu)), one(eltype(response.yu)))
+        mul!(response.residual, data.U, response.yu, -one_t, one_t)
     end
 
     response.yty = dot(Y, Y)
