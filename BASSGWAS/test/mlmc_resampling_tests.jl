@@ -13,7 +13,7 @@ function reference_stratified_rows(rng, weights)
     m = length(weights)
     uniforms = [(i - 1 + rand(rng)) / m for i in 1:m]
     rows = [findfirst(>(u), cdf) for u in uniforms]
-    shuffle!(rng, rows)
+    return shuffle!(rng, rows)
 end
 
 # Scripted stratum offsets exercise exact boundaries; shuffling uses a normal RNG.
@@ -26,16 +26,18 @@ StratifiedBoundaryRNG(offsets) = StratifiedBoundaryRNG(offsets, 1, Xoshiro(7))
 function Random.rand(rng::StratifiedBoundaryRNG, ::Type{Float64})
     value = rng.offsets[rng.cursor]
     rng.cursor += 1
-    value
+    return value
 end
 Random.shuffle!(rng::StratifiedBoundaryRNG, rows::AbstractVector) = shuffle!(rng.shuffle_rng, rows)
 
 @testset "Stratified posterior resampling" begin
     for T in (Float32, Float64)
-        cases = (ones(T, 32), T[1, 3, 2, 6],
-                 T[floatmin(T), 1, 2, floatmax(T)],
-                 floatmax(T) .* T[0.25, 0.5, 0.75, 1],
-                 floatmin(T) .* T[1, 2, 3, 4])
+        cases = (
+            ones(T, 32), T[1, 3, 2, 6],
+            T[floatmin(T), 1, 2, floatmax(T)],
+            floatmax(T) .* T[0.25, 0.5, 0.75, 1],
+            floatmin(T) .* T[1, 2, 3, 4],
+        )
         for weights in cases, seed in 1:20
             before = copy(weights)
             actual = BASSGWAS.mlmc_stratified_rows(Xoshiro(seed), weights)
@@ -48,7 +50,7 @@ Random.shuffle!(rng::StratifiedBoundaryRNG, rows::AbstractVector) = shuffle!(rng
         end
         weights = T[1, 3, 2, 6]
         @test BASSGWAS.mlmc_stratified_rows(Xoshiro(9), weights) ==
-              BASSGWAS.mlmc_stratified_rows(Xoshiro(9), 8 .* weights)
+            BASSGWAS.mlmc_stratified_rows(Xoshiro(9), 8 .* weights)
         uniform = BASSGWAS.mlmc_stratified_rows(Xoshiro(9), ones(T, 128))
         @test sort(uniform) == collect(1:128)
         @test !issorted(uniform)
@@ -63,8 +65,10 @@ Random.shuffle!(rng::StratifiedBoundaryRNG, rows::AbstractVector) = shuffle!(rng
     rows = BASSGWAS.mlmc_stratified_rows(StratifiedBoundaryRNG(fill(0.5, 4)), [1.0, 3, 2, 2])
     @test sort(rows) == [2, 2, 3, 4]
     # Underflowed leading mass is skipped even when the first uniform is zero.
-    rows = BASSGWAS.mlmc_stratified_rows(StratifiedBoundaryRNG(zeros(4)),
-                                       [nextfloat(0.0), floatmax(Float64), 1.0, 1.0])
+    rows = BASSGWAS.mlmc_stratified_rows(
+        StratifiedBoundaryRNG(zeros(4)),
+        [nextfloat(0.0), floatmax(Float64), 1.0, 1.0]
+    )
     @test rows == fill(2, 4)
 
     weights = [1.0, 3, 2, 6]
@@ -77,15 +81,17 @@ Random.shuffle!(rng::StratifiedBoundaryRNG, rows::AbstractVector) = shuffle!(rng
     expected = 4 .* weights ./ sum(weights)
     for row in 1:4
         @test abs(mean(counts[row, :]) - expected[row]) <
-              6std(counts[row, :]) / sqrt(size(counts, 2)) + 0.01
+            6std(counts[row, :]) / sqrt(size(counts, 2)) + 0.01
     end
 end
 
 @testset "Stratified constructor pool ordering and outcomes" begin
     for T in (Float32, Float64)
         m = 128
-        args = ([1, 2], zeros(T, 2, 1), ones(T, 1), zeros(T, 2, 1),
-                [fill(T(-1.2), 64); fill(T(1.2), 64)], zeros(T, m, 1), zeros(T, m, 1))
+        args = (
+            [1, 2], zeros(T, 2, 1), ones(T, 1), zeros(T, 2, 1),
+            [fill(T(-1.2), 64); fill(T(1.2), 64)], zeros(T, m, 1), zeros(T, m, 1),
+        )
         weights = [ones(T, 64); fill(T(3), 64)]
         rng = Xoshiro(19)
         expected_rows = reference_stratified_rows(rng, weights)
@@ -96,7 +102,7 @@ end
             expected_outcomes[i] = rand(rng, eltype(lp1)) < exp(selected_lp1[i]) ? 1 : 0
         end
         actual_rng = Xoshiro(19)
-        ec = MLMCEig(args..., weights; rng=actual_rng)
+        ec = MLMCEig(args..., weights; rng = actual_rng)
         @test ec.posterior_rows == expected_rows
         @test ec.lp_success == lp1[expected_rows, :]
         @test ec.lp_fail == lp0[expected_rows, :]

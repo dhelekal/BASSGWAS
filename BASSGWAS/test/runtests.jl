@@ -24,8 +24,12 @@ using Test
     @safetestset "Floating-point state types" begin
         include("state_type_tests.jl")
     end
-    @safetestset "Expected information gain" begin include("eig_tests.jl") end
-    @safetestset "Multilevel expected information gain" begin include("mlmc_eig_tests.jl") end
+    @safetestset "Expected information gain" begin
+        include("eig_tests.jl")
+    end
+    @safetestset "Multilevel expected information gain" begin
+        include("mlmc_eig_tests.jl")
+    end
     @safetestset "bvs tests" begin
         include("wtgs_tests.jl")
     end

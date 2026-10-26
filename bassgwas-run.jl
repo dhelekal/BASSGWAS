@@ -411,7 +411,7 @@ if batch_sz > 0
     # Build the batch greedily by EIG, honoring any required strains first.
     # With --randdes, choose the remaining strains randomly instead.
     ec = CIDEIG(idx_rem, U, S, X, iceptf, betasf, usf_full, Zs)
-    design = optimize_design(ec, idx_rem, batch_sz; randdes=randdes, idx_fixed=idx_fixed)
+    design = optimize_design(ec, idx_rem, batch_sz; randdes = randdes, idx_fixed = idx_fixed)
     # Write selected strain identifiers in dataset order, one per line in design.txt.
     selected = data[sort(design[1]), 1]
 

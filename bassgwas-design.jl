@@ -60,10 +60,10 @@ function parse_commandline()
         arg_type = Int
         help = "Design batch size"
         "--inclnext"
-            arg_type = String
-            help = "File of sample names to include in the next batch"
+        arg_type = String
+        help = "File of sample names to include in the next batch"
         "--mlmc"
-            action = :store_true
+        action = :store_true
     end
 
     s.description = "Optimise an experimental design using existing BASSGWAS samples."
@@ -168,9 +168,9 @@ Zs = (zz ./ sum(zz))
 n_samp = size(data[:, 1], 1)
 idx_rem = (1:n_samp)[1:n_samp .∉ Ref(idx_obs)]
 
-ec = mlmc ? MLMCEig(idx_rem, U, S, X, iceptf, betasf, usf, Zs, pilot_samples=24, M0=1) : CIDEIG(idx_rem, U, S, X, iceptf, betasf, usf, Zs)
+ec = mlmc ? MLMCEig(idx_rem, U, S, X, iceptf, betasf, usf, Zs, pilot_samples = 24, M0 = 1) : CIDEIG(idx_rem, U, S, X, iceptf, betasf, usf, Zs)
 
-design = optimize_design(ec, idx_rem, batch_sz; randdes=false, idx_fixed=idx_fixed)
+design = optimize_design(ec, idx_rem, batch_sz; randdes = false, idx_fixed = idx_fixed)
 selected = data[sort(design[1]), 1]
 
 println("Design objective value: $(design[2])")

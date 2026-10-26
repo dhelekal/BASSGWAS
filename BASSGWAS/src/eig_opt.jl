@@ -35,10 +35,10 @@ Return `(batch, obj)`, where `batch` contains original target indices and `obj`
 is the cumulative expected information gain after the final selection. Inputs
 are not mutated.
 """
-function optimize_design(ec::EIGest, idx_rem, batch_sz; randdes=false, idx_fixed=Int[])
+function optimize_design(ec::EIGest, idx_rem, batch_sz; randdes = false, idx_fixed = Int[])
     n_Y = size(idx_rem, 1)
     idx_set = collect(1:n_Y)
-    
+
     batch = similar(idx_set, batch_sz)
     n_fixed = length(idx_fixed)
     e = 0.0
@@ -49,11 +49,11 @@ function optimize_design(ec::EIGest, idx_rem, batch_sz; randdes=false, idx_fixed
         if i <= n_fixed
             maxi = findfirst(idx_fixed[i] .== idx_rem[idx_set])
         elseif randdes
-            maxi = rand(1:size(idx_set,1))
+            maxi = rand(1:size(idx_set, 1))
         else
-            maxi = findmax(obj)[2]  
+            maxi = findmax(obj)[2]
         end
-        
+
         maxind = idx_set[maxi]
         batch[i] = maxind
         e = obj[maxi]
@@ -62,7 +62,7 @@ function optimize_design(ec::EIGest, idx_rem, batch_sz; randdes=false, idx_fixed
         deleteat!(idx_set, maxi)
         ec = update_eig(ec, maxind)
     end
-    return (batch=idx_rem[batch], obj=e)
+    return (batch = idx_rem[batch], obj = e)
 end
 
 
@@ -76,7 +76,7 @@ Positions refer to candidates stored in the estimator, not original target
 identifiers. Scoring and state updates dispatch through `eig` and `update_eig`.
 Return the final scalar EIG, or `0.0` for an empty design.
 """
-function comp_eig(ec::EIGest, candidate_positions::Vector{T}) where T<:Integer
+function comp_eig(ec::EIGest, candidate_positions::Vector{T}) where {T <: Integer}
     n_Y = size(candidate_positions, 1)
     e = 0.0
     for i in 1:n_Y

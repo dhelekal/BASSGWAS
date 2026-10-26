@@ -28,7 +28,7 @@ Return one total EIG value per candidate position in `idx`, in the supplied
 order, for the current design extended by that candidate. These are total
 objectives, not incremental gains. Leave the supplied state unchanged.
 """
-function eig(eig::EIGest, idx::Vector{T}) where T<:Integer
+function eig(eig::EIGest, idx::Vector{T}) where {T <: Integer}
     error("Unimplemented EIG estimator")
 end
 
@@ -38,6 +38,6 @@ end
 Return an estimator state with candidate position `idx` added to the current
 design, leaving the supplied state unchanged.
 """
-function update_eig(eig::EIGest, idx::T) where T<:Integer
+function update_eig(eig::EIGest, idx::T) where {T <: Integer}
     error("Unimplemented EIG estimator")
 end
