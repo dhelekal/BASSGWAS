@@ -236,9 +236,11 @@ function prepare_active!(qc, sc, c, mc)
 
         @inbounds for j in 1:d
             h = zero(eltype(invlower))
+
             @simd for i in 1:d
                 h += abs2(invlower[i,j])
             end
+
             work.invdiag[j] = h
         end
 
