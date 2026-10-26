@@ -246,6 +246,7 @@ function _column_dots!(out,A,x,scale_product,scale_previous)
     P = size(A,2)
    
     threaded = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && length(A) >= CACHE_THREAD_WORK
+    
     foreach_block!(_column_dots_block!, (;out,A,x,scale_product,scale_previous), P;
         blocksize=threaded ? CACHE_BLOCK_COLUMNS : max(P,1),
         workers=threaded ? Threads.nthreads() : 1)
@@ -271,6 +272,7 @@ function _scaled_columns!(context, lo, hi, worker)
         # explained by covariance modes with very large variance.
         if g <= 64eps(eltype(QX)) * covariance.sinv * data.sqX[j]
             g = zero(g)
+            
             for row in axes(data.Xaug, 1)
                 v = data.Xaug[row,j]
                 for i in axes(UtX, 1)
@@ -278,6 +280,7 @@ function _scaled_columns!(context, lo, hi, worker)
                 end
                 g += covariance.sinv * v*v
             end
+
             for i in axes(UtX, 1)
                 g += covariance.invden[i] * UtX[i,j]^2
             end
@@ -288,6 +291,7 @@ function _scaled_columns!(context, lo, hi, worker)
     return 0
 end
 
+# Refresh covariance shur complement terms
 function _refresh_covariance!(sc, r, s)
     
     covariance, data = sc.covariance, sc.data
@@ -311,12 +315,16 @@ function _refresh_covariance!(sc, r, s)
     return true
 end
 
+#Update Covariance - Y projections
 function _refresh_response_terms!(sc)
     covariance, response, data = sc.covariance, sc.response, sc.data
+    
     @inbounds @simd for i in eachindex(response.weighted)
         response.weighted[i] = covariance.d2[i] * response.yu[i]
     end
+
     copyto!(response.fx, response.yx)
+
     if data.ns > 0
         _column_dots!(response.fx, data.UtX, response.weighted, -one(covariance.s), covariance.sinv)
     else
@@ -324,10 +332,13 @@ function _refresh_response_terms!(sc)
     end
     # Orthogonal-complement form avoids subtracting two nearly equal norms.
     q = covariance.sinv * response.perp2
+    
     for i in eachindex(response.yu)
         q += covariance.invden[i] * response.yu[i]^2
     end
+
     response.qterm = q
+
     return nothing
 end
 
@@ -335,16 +346,20 @@ end
 function update_response!(sc::SCache, Y)
     data, response = sc.data, sc.response
     Y isa AbstractVector && length(Y) == data.n || throw(DimensionMismatch("response must be a vector of the original length"))
+    
     _column_dots!(response.yx, data.Xaug, Y, one(eltype(response.yx)), zero(eltype(response.yx)))
     copyto!(response.residual, Y)
+    
     if data.ns > 0
         mul!(response.yu, transpose(data.U), Y)
         mul!(response.residual, data.U, response.yu, -one(eltype(response.yu)), one(eltype(response.yu)))
     end
+
     response.yty = dot(Y, Y)
     response.perp2 = dot(response.residual, response.residual)
     response.generation += UInt(1)
     _refresh_response_terms!(sc)
+
     return nothing
 end
 
