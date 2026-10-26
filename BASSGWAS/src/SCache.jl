@@ -233,7 +233,7 @@ end
 
 # Column dots are memory-bound for large predictor sets. Each worker reads
 # contiguous columns and owns disjoint outputs, including strided active rows.
-function _column_dots_block!(data,lo,hi)
+function _column_dots_block!(data,lo,hi,worker)
     (;out,A,x,scale_product,scale_previous) = data
     mul!(view(out,lo:hi), transpose(view(A,:,lo:hi)), x,
         scale_product, scale_previous)
@@ -253,7 +253,7 @@ function _column_dots!(out,A,x,scale_product,scale_previous)
     return nothing
 end
 
-function _scaled_columns!(context, lo, hi)
+function _scaled_columns!(context, lo, hi, worker)
     (;covariance,data) = context
     QX, UtX, d = covariance.QX, data.UtX, covariance.d
     

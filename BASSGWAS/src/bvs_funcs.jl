@@ -244,7 +244,7 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
 end
 
 
-function _rates_block!(data, lo, hi)
+function _rates_block!(data, lo, hi, worker)
     (;rates,conds,pips,llrs,w) = data
     @turbo for k in lo:hi
         llr = llrs[k]
@@ -290,7 +290,7 @@ function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
     nothing
 end
 
-function _llrs_block!(data, lo, hi)
+function _llrs_block!(data, lo, hi, worker)
     (;llrs,dets,ssq,offset,loglik) = data
     @views ll_plus_a!(llrs[lo:hi],dets[lo:hi],ssq[lo:hi],offset,loglik)
     return 0

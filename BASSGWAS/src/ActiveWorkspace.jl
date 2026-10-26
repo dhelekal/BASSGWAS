@@ -144,7 +144,7 @@ end
 
 # Numerical kernels use strided, contiguous-column views of reserved storage.
 # Index-vector gathers are copied into those buffers once per model.
-function _active_product_block!(data, lo, hi)
+function _active_product_block!(data, lo, hi, worker)
     (;qc,sc) = data
     d = qc.d
     covdata = view(qc.covdata,1:d,lo:hi)
@@ -259,9 +259,11 @@ function prepare_active!(qc, sc, c, mc)
     return work
 end
 
-function _candidate_block!(data,lo,hi)
-    (;dets,ssq,qc,sc,c,buffer) = data
+function _candidate_block!(data,lo,hi,worker)
+    (;dets,ssq,qc,sc,c) = data
     work, d = qc.work, qc.d
+    # Scratch belongs to logical workers, independent of task migration/thread IDs.
+    buffer = work.blocks[worker]
     block = view(buffer,1:d,1:(hi-lo+1))
     copyto!(block,view(qc.covdata,1:d,lo:hi))
     ldiv!(LowerTriangular(view(work.factor,1:d,1:d)),block)
@@ -285,18 +287,12 @@ function _candidate_block!(data,lo,hi)
     return 0
 end
 
-function _candidate_worker_data(data, worker)
-    # Scratch belongs to logical workers, independent of task migration/thread IDs.
-    return (;data...,buffer=data.qc.work.blocks[worker])
-end
-
 function candidate_terms!(dets,ssq,qc,sc,c)
     p = length(dets)
     threaded = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && qc.d*p >= CACHE_THREAD_WORK
     bad = foreach_block!(_candidate_block!, (;dets,ssq,qc,sc,c), p;
         blocksize=CACHE_BLOCK_COLUMNS,
-        workers=threaded ? length(qc.work.blocks) : 1,
-        worker_data=_candidate_worker_data)
+        workers=threaded ? length(qc.work.blocks) : 1)
     bad == 0 || throw(PosDefException(bad))
 
     return nothing

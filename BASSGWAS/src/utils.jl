@@ -12,27 +12,28 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-_shared_block_data(data, worker) = data
-
 function _foreach_block_worker!(context, worker, nb, nw, n, blocksize)::Int
-    data = context.worker_data(context.data,worker)
+    
     first_block = fld((worker-1)*nb,nw)+1
     last_block = fld(worker*nb,nw)
+    
     for b in first_block:last_block
         lo = (b-1)*blocksize+1
-        status = context.task!(data,lo,min(b*blocksize,n))::Int
+        status = context.task!(context.data,lo,min(b*blocksize,n),worker)::Int
         status == 0 || return status
     end
+
     return 0
 end
 
 """
-    foreach_block!(task!, data, n; blocksize, workers=Threads.nthreads(),
-                   worker_data=_shared_block_data) -> Int
+    foreach_block!(task!, data, n; blocksize, workers=Threads.nthreads()) -> Int
 
-Apply `task!(data, lo, hi)` to contiguous blocks of `1:n`, with inclusive
-bounds. Each logical worker owns a balanced contiguous range of blocks and
-receives `worker_data(data, worker)` once. The default shares `data` unchanged.
+Apply `task!(data, lo, hi, worker)` to contiguous blocks of `1:n`, with
+inclusive bounds and `data` passed unchanged. Each logical worker owns a
+balanced contiguous range of blocks. Its index is stable across those blocks
+and ranges from one to the number of participating workers, independently of
+`Threads.threadid()`. Serial execution passes `worker = 1`.
 
 Tasks return an `Int`: zero on success, otherwise a failure code. A failure
 stops that worker; other workers finish independently. Return the first
@@ -44,25 +45,30 @@ the serial path needs no status storage. Empty input invokes no callbacks.
 `n` must be nonnegative; `blocksize` and `workers` must be positive integers.
 """
 function foreach_block!(task!::F, data::D, n::Integer;
-                        blocksize::Integer, workers::Integer=Threads.nthreads(),
-                        worker_data::W=_shared_block_data)::Int where {F,D,W}
+                        blocksize::Integer, workers::Integer=Threads.nthreads())::Int where {F,D}
+
     n >= 0 || throw(ArgumentError("n must be nonnegative"))
     blocksize > 0 || throw(ArgumentError("blocksize must be positive"))
     workers > 0 || throw(ArgumentError("workers must be positive"))
+
     n == 0 && return 0
     nb = cld(n,blocksize)
     nw = min(workers,Threads.nthreads(),nb)
+
     # Bundle captures to preserve the original array types for BLAS dispatch.
-    context = (;task!,data,worker_data)
+    context = (;task!,data)
     nw == 1 && return _foreach_block_worker!(context,1,nb,nw,n,blocksize)
 
     statuses = zeros(Int,nw)
+    
     @batch for worker in 1:nw
         statuses[worker] = _foreach_block_worker!(context,worker,nb,nw,n,blocksize)
     end
+
     for status in statuses
         status == 0 || return status
     end
+
     return 0
 end
 

@@ -4,17 +4,14 @@ using Test
 using BASSGWAS
 using LinearAlgebra
 
-function block_test_worker_data(data, worker)
-    data.initializations[worker] += 1
-    return (;data...,worker,buffer=data.buffers[worker])
-end
-
-function record_block!(data, lo, hi)
+function record_block!(data, lo, hi, worker)
     # Reuse worker-owned scratch across blocks; its contents identify the owner.
-    fill!(data.buffer,data.worker)
+    buffer = data.buffers[worker]
+    fill!(buffer,worker)
+    data.worker_calls[worker] += 1
     @inbounds for i in lo:hi
         data.visits[i] += 1
-        data.owners[i] = data.buffer[1]
+        data.owners[i] = buffer[1]
     end
     data.calls[lo] = hi
     return data.failures[lo]
@@ -22,28 +19,29 @@ end
 
 function block_test_data(n, workers)
     return (;visits=zeros(Int,n),owners=zeros(Int,n),calls=zeros(Int,n),
-        failures=zeros(Int,n),initializations=zeros(Int,workers),
+        failures=zeros(Int,n),worker_calls=zeros(Int,workers),
         buffers=[zeros(Int,1) for _ in 1:workers])
 end
 
-@testset "Contiguous block coverage and worker contexts" begin
+@testset "Contiguous block coverage and logical worker indices" begin
     for n in (0,1,255,256,257,1027), requested in (1,3,Threads.nthreads()+2)
         data = block_test_data(n,requested)
         result = BASSGWAS.foreach_block!(record_block!,data,n;
-            blocksize=256,workers=requested,worker_data=block_test_worker_data)
+            blocksize=256,workers=requested)
         nw = min(requested,Threads.nthreads(),cld(n,256))
         @test result == 0
         @test all(==(1),data.visits)
         @test issorted(data.owners)
         @test unique(data.owners) == collect(1:nw)
-        @test data.initializations == [ones(Int,nw);zeros(Int,requested-nw)]
+        @test data.worker_calls == [count(==(worker),data.owners[1:256:n]) for worker in 1:requested]
         @test findall(!iszero,data.calls) == collect(1:256:n)
         @test data.calls[1:256:n] == min.(collect(256:256:(cld(n,256)*256)),n)
 
         serial = block_test_data(n,1)
         @test BASSGWAS.foreach_block!(record_block!,serial,n;
-            blocksize=256,workers=1,worker_data=block_test_worker_data) == 0
+            blocksize=256,workers=1) == 0
         @test serial.visits == data.visits && serial.calls == data.calls
+        @test serial.owners == ones(Int,n)
     end
 end
 
@@ -60,7 +58,7 @@ end
             data.failures[12*(worker-1)+1] = 90-worker
         end
         @test BASSGWAS.foreach_block!(record_block!,data,n;
-            blocksize=4,workers=requested,worker_data=block_test_worker_data) == 90
+            blocksize=4,workers=requested) == 90
         @test data.visits[1:8] == ones(Int,8)
         @test data.visits[9:12] == zeros(Int,4)
         for worker in 2:nw
@@ -68,22 +66,22 @@ end
             @test data.visits[lo:lo+3] == ones(Int,4)
             @test data.visits[lo+4:lo+11] == zeros(Int,8)
         end
-        @test data.initializations == ones(Int,nw)
+        @test data.worker_calls == [2;ones(Int,nw-1)]
 
         fill!(data.failures,0)
         fill!(data.visits,0)
         @test BASSGWAS.foreach_block!(record_block!,data,n;
-            blocksize=4,workers=requested,worker_data=block_test_worker_data) == 0
+            blocksize=4,workers=requested) == 0
         @test all(==(1),data.visits)
 
         # A successful earlier worker must not hide a later worker's failure.
         data.failures[n-3] = -7
         @test BASSGWAS.foreach_block!(record_block!,data,n;
-            blocksize=4,workers=requested,worker_data=block_test_worker_data) == -7
+            blocksize=4,workers=requested) == -7
     end
 end
 
-function typed_dot_block!(data, lo, hi)
+function typed_dot_block!(data, lo, hi, worker)
     # Return a failure instead of throwing inside a Polyester callback.
     typeof(data.A) === data.matrix_type || return 1
     typeof(data.out) === data.output_type || return 2
@@ -114,8 +112,7 @@ end
 function independent_block_run(code)
     data = block_test_data(1027,Threads.nthreads())
     data.failures[end-2] = code # First index of the partial final block.
-    status = BASSGWAS.foreach_block!(record_block!,data,1027;
-        blocksize=256,worker_data=block_test_worker_data)
+    status = BASSGWAS.foreach_block!(record_block!,data,1027;blocksize=256)
     return status,data.visits,data.owners
 end
 
@@ -125,7 +122,7 @@ end
     @test fetch.(tasks) == expected
 end
 
-function no_op_block!(data, lo, hi)
+function no_op_block!(data, lo, hi, worker)
     return 0
 end
 
@@ -138,8 +135,8 @@ end
     for (n,blocksize,workers) in ((-1,1,1),(0,0,1),(1,-1,1),(0,1,0),(1,1,-1))
         @test_throws ArgumentError BASSGWAS.foreach_block!(no_op_block!,nothing,n;blocksize,workers)
     end
-    # Neither worker setup nor the block callback may run for empty input.
-    @test BASSGWAS.foreach_block!(nothing,nothing,0;blocksize=1,worker_data=nothing) == 0
+    # The block callback must not run for empty input.
+    @test BASSGWAS.foreach_block!(nothing,nothing,0;blocksize=1) == 0
     @test block_allocations(16384,1) == 0
     for workers in (1,3)
         small = block_allocations(4096,workers)
