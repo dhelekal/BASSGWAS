@@ -261,28 +261,3 @@ function optimize_design(idx_rem, Ufull, Sfull, X, icept, betas, us, Z, batch_sz
     end
     return (batch=idx_rem[batch], obj=e)
 end
-
-
-"""
-    comp_eig(idx_design, idx_obs, Uobs, Sobs, Ufull, Sfull, X, icept,
-             betas, us, rs, Z, batch_sz)
-
-Legacy helper intended to evaluate the expected information gain of a fixed
-design.
-
-!!! warning
-    The helper currently calls a `CIDEIG` constructor signature that is not
-    implemented, so it raises a `MethodError` when invoked.
-"""
-function comp_eig(idx_design, idx_obs, Uobs, Sobs, Ufull, Sfull, X, icept, betas, us, rs, Z, batch_sz)
-    n_Y = size(idx_design, 1)
-    # TODO: Reconcile this legacy call with the implemented `CIDEIG` constructor.
-    ec = CIDEIG(idx_obs, idx_design, Uobs, Sobs, Ufull, Sfull, X, icept, betas, us, rs, Z)
-    e = 0.0
-    for i in 1:n_Y
-        obj = eig(ec, 1:n_Y)
-        e = obj[i]
-        ec = add_next_idx(ec, i)
-    end
-    return e
-end

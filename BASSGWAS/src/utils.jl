@@ -12,6 +12,19 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+@inline function _positive_variance(x, name)
+    isfinite(x) && x > 0 || throw(ArgumentError("$name must be finite and positive"))
+    return nothing
+end
+
+# Promote first so integer inputs do not unnecessarily widen floating inputs.
+function _state_float_type(types...)
+    T = float(promote_type(types...))
+    T <: AbstractFloat && isconcretetype(T) ||
+        throw(ArgumentError("state inputs must promote to a concrete floating-point type"))
+    return T
+end
+
 function _foreach_block_worker!(context, worker, nb, nw, n, blocksize)::Int
     
     first_block = fld((worker-1)*nb,nw)+1
@@ -72,64 +85,25 @@ function foreach_block!(task!::F, data::D, n::Integer;
     return 0
 end
 
-"""
-    _vpacnormsq!(v, a, X, Y)
+# Column dots are memory-bound for large predictor sets. Each worker reads
+# contiguous columns and owns disjoint outputs, including strided active rows.
+function _column_dots_block!(data,lo,hi,worker)
+    (;out,A,x,scale_product,scale_previous) = data
+    mul!(view(out,lo:hi), transpose(view(A,:,lo:hi)), x,
+        scale_product, scale_previous)
 
-Accumulate `a * sum(X[:, i] .* Y[:, i])` into each element `v[i]`.
-
-`X` and `Y` must have identical dimensions, and `v` must have one element per
-matrix column. The update is performed in place and the function returns
-`nothing`.
-"""
-function _vpacnormsq!(v, a, X, Y)
-    size(X) != size(Y) && throw(ArgumentError("Array dimensions must match"))
-    ncol = size(X,2)
-    size(v) != (ncol, ) &&  throw(ArgumentError("Vector length, $(size(v)), must match column count, $((ncol, ))"))
-    
-    for i in axes(X,2), j in axes(X,1)
-        @inbounds v[i] += a * X[j,i] * Y[j,i]
-    end
+    return 0
 end
 
-"""
-    _copyto_loo!(dest::AbstractMatrix, A::AbstractMatrix, i)
+function _column_dots!(out,A,x,scale_product,scale_previous)
 
-Copy `A` into `dest` while omitting row and column `i`.
+    P = size(A,2)
 
-`dest` must be one row and one column smaller than `A`. Indices use Julia's
-one-based convention, and `dest` is mutated in place.
-"""
-function _copyto_loo!(dest::AbstractMatrix, A::AbstractMatrix, i)
-    m = size(A,1) 
-    n = size(A,2)
-    size(dest) != (m-1, n-1) && 
-        throw(ArgumentError("Incorrect destination matrix size"))
+    threaded = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && length(A) >= CACHE_THREAD_WORK
 
-    j = i-1
+    foreach_block!(_column_dots_block!, (;out,A,x,scale_product,scale_previous), P;
+        blocksize=threaded ? CACHE_BLOCK_COLUMNS : max(P,1),
+        workers=threaded ? Threads.nthreads() : 1)
 
-    @views dest[1:j, 1:j] .= A[1:j, 1:j]
-    @views dest[(j+1):end, 1:j] .= A[(i+1):end, 1:j]
-
-    @views dest[1:j, (j+1):end] .= A[1:j, (i+1):end]
-    @views dest[(j+1):end, (j+1):end] .= A[(i+1):end, (i+1):end]
-
-end
-
-"""
-    _copyto_loo!(dest::AbstractVector, A::AbstractVector, i)
-
-Copy `A` into `dest` while omitting element `i`.
-
-`dest` must contain one fewer element than `A`. Indices use Julia's one-based
-convention, and `dest` is mutated in place.
-"""
-function _copyto_loo!(dest::AbstractVector, A::AbstractVector, i)
-    m = size(A,1) 
-    size(dest,1) != (m-1) && 
-        throw(ArgumentError("Incorrect destination vector size. Expected $(m-1). Found $(size(dest))."))
- 
-    j = i-1
-
-    @views dest[1:j] .= A[1:j]
-    @views dest[(j+1):end] .= A[(i+1):end]
+    return nothing
 end

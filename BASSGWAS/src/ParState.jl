@@ -64,14 +64,6 @@ mutable struct ParState2{T<:AbstractFloat}
     end
 end
 
-# Promote first so integer inputs do not unnecessarily widen floating inputs.
-function _state_float_type(types...)
-    T = float(promote_type(types...))
-    T <: AbstractFloat && isconcretetype(T) ||
-        throw(ArgumentError("state inputs must promote to a concrete floating-point type"))
-    return T
-end
-
 """
     ParState2(X, Y, U, S, alpha, beta, c, r, s, mc)
     ParState2{T}(X, Y, U, S, alpha, beta, c, r, s, mc)

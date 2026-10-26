@@ -184,11 +184,6 @@ Base.propertynames(::SCache, private::Bool=false) =
     return getfield(sc, name)
 end
 
-@inline function _positive_variance(x, name)
-    isfinite(x) && x > 0 || throw(ArgumentError("$name must be finite and positive"))
-    return nothing
-end
-
 # Use log space only outside the safe direct-ratio range. This handles zero
 # modes and avoids overflow in r*S or r*S/s for otherwise finite inputs.
 function _covariance_weights!(d, d2, invden, S, r, s, n)
@@ -227,29 +222,6 @@ function _comp_d!(d, S, r, s)
         z = S[i] == 0 ? -Inf : log(r) + log(S[i]) - log(s)
         d[i] = sqrt(logistic(z) / s)
     end
-
-    return nothing
-end
-
-# Column dots are memory-bound for large predictor sets. Each worker reads
-# contiguous columns and owns disjoint outputs, including strided active rows.
-function _column_dots_block!(data,lo,hi,worker)
-    (;out,A,x,scale_product,scale_previous) = data
-    mul!(view(out,lo:hi), transpose(view(A,:,lo:hi)), x,
-        scale_product, scale_previous)
-    
-    return 0
-end
-
-function _column_dots!(out,A,x,scale_product,scale_previous)
-    
-    P = size(A,2)
-   
-    threaded = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && length(A) >= CACHE_THREAD_WORK
-    
-    foreach_block!(_column_dots_block!, (;out,A,x,scale_product,scale_previous), P;
-        blocksize=threaded ? CACHE_BLOCK_COLUMNS : max(P,1),
-        workers=threaded ? Threads.nthreads() : 1)
 
     return nothing
 end
