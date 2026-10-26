@@ -284,13 +284,16 @@ function _candidate_block!(data, lo, hi, worker)
     copyto!(block, view(qc.covdata, 1:d, lo:hi))
     ldiv!(LowerTriangular(view(work.factor, 1:d, 1:d)), block)
     cinv, lc = inv(c), log(c)
+
     @inbounds for j in axes(block, 2)
         normb, uy = zero_t, zero_t
+
         @simd for i in 1:d
             x = block[i, j]
             normb += x * x
             uy += x * work.u[i]
         end
+
         index = lo + j - 1
         h = cinv + sc.covariance.gramdiag[index] - normb
         # Propagate failures to the calling task; never throw across a
@@ -300,12 +303,14 @@ function _candidate_block!(data, lo, hi, worker)
         ssq[index] = work.ssq - residual^2 / h
         dets[index] = work.det + log(h) + lc
     end
+
     return 0
 end
 
 function candidate_terms!(dets, ssq, qc, sc, c)
     p = length(dets)
     threaded = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && qc.d * p >= CACHE_THREAD_WORK
+
     bad = foreach_block!(
         _candidate_block!, (; dets, ssq, qc, sc, c), p;
         blocksize = CACHE_BLOCK_COLUMNS,

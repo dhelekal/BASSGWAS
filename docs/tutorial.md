@@ -403,7 +403,7 @@ should only take a few minutes.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.5474546959099746
+    ## Found xi=3.5474546959099715
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -426,7 +426,7 @@ should only take a few minutes.
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.19909125169118 minutes."
+    ## [1] "Run time: 2.17646934986114 minutes."
 
 When using BASS-GWAS with real data, using up to 4 threads per chain is
 recommended. We recommend running chains for 500 × 1000 iterations and
@@ -739,12 +739,12 @@ Run BASS-GWAS
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 4.3481219568983684
+    ## Design objective value: 4.34812195689837
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.06861670017242 minutes."
+    ## [1] "Run time: 2.18757361570994 minutes."
 
 ### Round 1
 
@@ -767,7 +767,7 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=4.402499130378539
+    ## Found xi=4.40249913037854
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -787,12 +787,12 @@ Run BASS-GWAS
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.5892368535837793
+    ## Design objective value: 3.5892368535837766
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.09395720163981 minutes."
+    ## [1] "Run time: 2.31884651581446 minutes."
 
 Compute position PIPs
 
@@ -851,12 +851,12 @@ Run BASS-GWAS
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.621631479397438
+    ## Design objective value: 3.6216314793974407
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.08615320126216 minutes."
+    ## [1] "Run time: 2.22837971448898 minutes."
 
 Compute position PIPs
 
@@ -895,7 +895,7 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.470553597159578
+    ## Found xi=3.4705535971595785
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -915,12 +915,12 @@ Run BASS-GWAS
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 2.7121710027584474
+    ## Design objective value: 2.712171002758449
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.07279716730118 minutes."
+    ## [1] "Run time: 2.37345720132192 minutes."
 
 Compute position PIPs
 
@@ -959,7 +959,7 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=4.512610019541574
+    ## Found xi=4.512610019541573
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -984,7 +984,7 @@ Run BASS-GWAS
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.18005533218384 minutes."
+    ## [1] "Run time: 2.56128575007121 minutes."
 
 Compute position PIPs
 

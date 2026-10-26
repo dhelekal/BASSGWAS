@@ -149,6 +149,7 @@ function CIDEIG(
     end
 
     cond_ent = similar(p1, n_Y)
+
     for i in 1:n_Y
         s = 0.0
         for j in 1:n_it
@@ -245,6 +246,7 @@ function optimize_design(idx_rem, Ufull, Sfull, X, icept, betas, us, Z, batch_sz
         obj = eig(ec, idx_set)
 
         maxi = 0
+
         if i <= n_fixed
             maxi = findfirst(idx_fixed[i] .== idx_rem[idx_set])
         elseif randdes

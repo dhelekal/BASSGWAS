@@ -202,6 +202,7 @@ function _covariance_weights!(d, d2, invden, S, r, s, n)
 
     for i in eachindex(S)
         t = r * S[i] / s
+
         if isfinite(t) && (t > 0 || S[i] == 0)
             w = t / (1 + t)
             ld = log1p(t)
@@ -212,6 +213,7 @@ function _covariance_weights!(d, d2, invden, S, r, s, n)
             w = logistic(z)
             invden[i] = exp(-log(s) - ld)
         end
+
         d2[i] = w * sinv
         d[i] = sqrt(d2[i])
         cdet += ld
@@ -256,9 +258,11 @@ function _scaled_columns!(context, lo, hi, worker)
 
             for row in axes(data.Xaug, 1)
                 v = data.Xaug[row, j]
+
                 for i in axes(UtX, 1)
                     v -= data.U[row, i] * UtX[i, j]
                 end
+
                 g += covariance.sinv * v * v
             end
 
