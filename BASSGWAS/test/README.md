@@ -58,6 +58,11 @@ quadratic forms and cloned RNGs to verify the inverse-gamma draw and liability
 rescaling. These two draw routines assume unit residual variance. Deterministic
 comparisons use `rtol=1e-8` and `atol=1e-10` (normalization checks use the stated
 absolute tolerance).
+
+An intercept-only binary probit regression also checks the full sampler's
+posterior second moment against independent numerical integration. Three seeded
+chains and batch-mean error estimates exercise the shift augmentation, beyond
+the fixed-latent-response conditional checks above.
 ## Dependency caches and reusable workspaces
 
 `workspace_tests.jl` checks independent response/covariance invalidation,

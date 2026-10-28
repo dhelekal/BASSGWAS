@@ -297,7 +297,8 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         mu = rand(rng, Normal(zero_t, sig))
         Y_new .+= mu
         sqI1, YI1 = shift_terms!(qc, sc, Y_new)
-        tauup = (one_t / sig * sig + sqI1)
+        # Normal's second argument is a standard deviation, so its precision is 1/sig^2.
+        tauup = one_t / sig^2 + sqI1
         sigup = one_t / tauup
         muup = YI1 * sigup
         lo = maximum(Y_new[findall(signs .< 0.0)])
