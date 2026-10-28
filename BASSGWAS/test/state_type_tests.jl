@@ -169,3 +169,62 @@ end
         @test posterior.beta isa Vector{Float64}
     end
 end
+
+@testset "Proposal adaptation with independently controlled xi" begin
+    ps = numerical_fixture(3; s = 1.0)
+    snapshot(adaptor) = map(name -> deepcopy(getfield(adaptor, name)), fieldnames(typeof(adaptor)))
+    for nadapt in (-1, 1.5)
+        @test_throws ArgumentError ProbitBVSSampler(
+            ps.Xaug[:, 1:ps.p], Int.(ps.Y .> 0), ps.U, ps.S, 1, 2; nadapt
+        )
+    end
+    for sample_c in (false, true), adapt_xi in (false, true)
+        sampler = ProbitBVSSampler(
+            ps.Xaug[:, 1:ps.p], Int.(ps.Y .> 0), ps.U, ps.S, 1, 2;
+            sample_c, adapt_xi, nadapt = 24, xi_init = 1.0, rng = Xoshiro(304)
+        )
+        initial_adaptor = snapshot(sampler.adaptor)
+        @test !is_adapted(sampler)
+        for _ in 1:23
+            next_step!(sampler)
+            @test !is_adapted(sampler)
+            if !adapt_xi
+                @test sampler.wTGSState.xi == 1.0
+                @test sampler.wTGSState.rates[end] == 1.0
+            end
+        end
+        @test snapshot(sampler.adaptor) != initial_adaptor
+        @test sampler.adaptor.stage == 3
+        @test all(isfinite, sampler.adaptor.scales)
+        @test isfinite(sampler.adaptor.dt) && sampler.adaptor.dt > 0
+        @test adapt_xi ? sampler.wTGSState.xi != 1.0 : sampler.wTGSState.xi == 1.0
+
+        # Production chains discard exactly nadapt transitions before retaining draws.
+        next_step!(sampler)
+        @test sampler.T == 24
+        @test is_adapted(sampler)
+        frozen_adaptor = snapshot(sampler.adaptor)
+        frozen_xi = sampler.wTGSState.xi
+        for _ in 1:100
+            next_step!(sampler)
+        end
+        @test snapshot(sampler.adaptor) == frozen_adaptor
+        @test sampler.wTGSState.xi == frozen_xi
+    end
+
+    # Explicitly requesting no warm-up disables both kinds of adaptation.
+    for adapt_xi in (false, true)
+        sampler = ProbitBVSSampler(
+            ps.Xaug[:, 1:ps.p], Int.(ps.Y .> 0), ps.U, ps.S, 1, 2;
+            adapt_xi, nadapt = 0, rng = Xoshiro(304)
+        )
+        initial_adaptor = snapshot(sampler.adaptor)
+        initial_xi = sampler.wTGSState.xi
+        @test is_adapted(sampler)
+        for _ in 1:24
+            next_step!(sampler)
+        end
+        @test snapshot(sampler.adaptor) == initial_adaptor
+        @test sampler.wTGSState.xi == initial_xi
+    end
+end

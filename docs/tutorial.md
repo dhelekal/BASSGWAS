@@ -403,22 +403,22 @@ should only take a few minutes.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.364711920865157
+    ## Found xi=3.365718266426454
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64       Missing
+    ##   parameters      mean       std      mcse   ess_bulk    ess_tail      rhat   ess_per_sec
+    ##       Symbol   Float64   Float64   Float64    Float64     Float64   Float64       Missing
     ## 
-    ##            n    7.1630    4.6519    0.2682   303.0600   430.8142    1.0023       missing
-    ##        sigma    1.1539    1.9776    0.0641   926.7644   945.1891    0.9996       missing
-    ##            r    0.8467    1.4288    0.0574   633.3964   938.1596    1.0014       missing
-    ##            c   12.4318   13.9325    0.5153   490.7548   903.9422    1.0014       missing
-    ##        icept   -5.1459    2.2802    0.1441   262.3256   523.0442    1.0011       missing
-    ##            Z    0.0698    0.0356    0.0012   838.9135   908.4580    1.0003       missing
+    ##            n    7.0730    4.3782    0.2170   433.8511    635.7030    1.0011       missing
+    ##        sigma    1.0877    1.4694    0.0458   924.3000   1023.3969    1.0022       missing
+    ##            r    0.9188    1.5568    0.0701   740.3940    683.9265    1.0009       missing
+    ##            c   12.3853   15.3099    0.7304   426.1704    580.2577    1.0028       missing
+    ##        icept   -5.2305    2.5092    0.1356   332.9888    454.0099    1.0004       missing
+    ##            Z    0.0700    0.0351    0.0013   731.7656    755.0176    0.9999       missing
     ## 
     ## Saving draws ...
     ## Done
@@ -426,7 +426,7 @@ should only take a few minutes.
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.36017609834671 minutes."
+    ## [1] "Run time: 2.24462643067042 minutes."
 
 When using BASS-GWAS with real data, using up to 4 threads per chain is
 recommended. We recommend running chains for 500 × 1000 iterations and
@@ -616,13 +616,13 @@ the annotated de novo assembly from its own parent isolate.
         print(n = 5, max_extra_cols = 0, width=60)
 
     ## # A tibble: 3,600 × 2
-    ##   group       PIP
-    ##   <chr>     <dbl>
-    ## 1 gyrA     0.895 
-    ## 2 parC     0.302 
-    ## 3 tbpB_2   0.0994
-    ## 4 WHO_N.55 0.0972
-    ## 5 piiC_3   0.0926
+    ##   group         PIP
+    ##   <chr>       <dbl>
+    ## 1 gyrA       0.849 
+    ## 2 parC       0.398 
+    ## 3 tbpB_2     0.118 
+    ## 4 piiC_3     0.0998
+    ## 5 WHO_N.2312 0.0954
     ## # ℹ 3,595 more rows
 
 Based on these two summaries we can see that there are two peaks at the
@@ -666,16 +666,16 @@ mapping to *gyrA* and display the top 5.
     ## # A tibble: 217 × 8
     ##    variant     contig locus   down     up pattern_id     PIP
     ##    <chr>       <chr>  <chr>  <dbl>  <dbl>      <dbl>   <dbl>
-    ##  1 TCATCGGTAA… WHO_N  gyrA  996715 996748       5753 0.396  
-    ##  2 TCATCGGTAA… WHO_N  gyrA  996715 996756       2055 0.386  
-    ##  3 CGGTAAATAC… WHO_N  gyrA  996719 996756       8603 0.0688 
-    ##  4 TACGACACCA… WHO_G  gyrA  995790 995822       4659 0.0210 
-    ##  5 GACACCATCG… WHO_N  gyrA  996756 996787       1507 0.0110 
-    ##  6 ACCACCCCCA… WHO_N  gyrA  996727 996775       2687 0.00606
-    ##  7 CCTTCCCCGC… gnl|X… gyrA     200    231       6762 0.00426
-    ##  8 AACCCTTCCC… gnl|X… gyrA     197    229       7377 0.00337
-    ##  9 AATTTGCAGC… gnl|X… gyrA   44252  44290       9690 0.00181
-    ## 10 ATTAACGGCA… gnl|X… gyrA      93    123       1068 0.00174
+    ##  1 TCATCGGTAA… WHO_N  gyrA  996715 996756       2055 0.355  
+    ##  2 TCATCGGTAA… WHO_N  gyrA  996715 996748       5753 0.349  
+    ##  3 CGGTAAATAC… WHO_N  gyrA  996719 996756       8603 0.0935 
+    ##  4 ACCACCCCCA… WHO_N  gyrA  996727 996775       2687 0.0125 
+    ##  5 GACACCATCG… WHO_N  gyrA  996756 996787       1507 0.00998
+    ##  6 ACCACCCCCA… WHO_N  gyrA  996727 996782       9393 0.00951
+    ##  7 TACGACACCA… WHO_G  gyrA  995790 995822       4659 0.00766
+    ##  8 AAGGGTTACG… gnl|X… gyrA     136    168       7275 0.00393
+    ##  9 GCGGCGTGCG… WHO_N  gyrA  997177 997216       9785 0.00303
+    ## 10 AGACATTGAG… WHO_N  gyrA  996905 996965       5802 0.00215
     ## # ℹ 207 more rows
 
 # Adaptive experimental design
@@ -719,32 +719,32 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.5294800314215062
+    ## Found xi=3.5288585061067836
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64       Missing
+    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ess_per_sec
+    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64       Missing
     ## 
-    ##            n    7.2150    6.7510    0.2883    646.2945   509.6093    1.0098       missing
-    ##        sigma    0.9838    0.9233    0.0274   1125.8978   836.7644    0.9983       missing
-    ##            r    2.7430    5.6440    0.1789   1047.7588   915.9081    0.9989       missing
-    ##            c    8.9786   11.3439    0.3578   1013.3785   808.4946    1.0023       missing
-    ##        icept   -2.0196    2.5075    0.0778   1050.7900   975.3741    0.9989       missing
-    ##            Z    0.0734    0.0316    0.0011    660.5971   554.6163    1.0038       missing
+    ##            n    7.7130    7.3737    0.3371    552.0065    581.3961    1.0033       missing
+    ##        sigma    0.9561    1.0049    0.0315   1044.3774    942.8433    0.9987       missing
+    ##            r    2.7840    5.6343    0.1764    935.9887   1001.0774    0.9993       missing
+    ##            c    8.7843   12.6676    0.3915    917.4107    766.9825    1.0007       missing
+    ##        icept   -1.9870    2.4134    0.0771    964.9740    886.8298    1.0015       missing
+    ##            Z    0.0726    0.0321    0.0012    573.4171    565.4394    1.0026       missing
     ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 4.25132152967327
+    ## Design objective value: 4.288152479126987
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.14785154660543 minutes."
+    ## [1] "Run time: 2.21197825272878 minutes."
 
 ### Round 1
 
@@ -767,32 +767,32 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=2.9206738241148793
+    ## Found xi=3.1273705488147843
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64       Missing
+    ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   ess_per_sec
+    ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64       Missing
     ## 
-    ##            n    6.4620    6.5737    0.3002    635.8612   563.6441    1.0024       missing
-    ##        sigma    1.1854    2.5929    0.0867   1015.2237   938.5374    0.9996       missing
-    ##            r    5.6091    8.6183    0.3051    822.4060   873.2982    0.9983       missing
-    ##            c   12.3616   27.0914    0.8555    991.9257   984.6863    0.9983       missing
-    ##        icept   -2.7995    2.3430    0.0824    857.2771   896.9564    0.9992       missing
-    ##            Z    0.0803    0.0380    0.0013    776.1739   662.4620    1.0010       missing
+    ##            n    8.7660    7.4898    0.3567   536.3433   399.6971    0.9997       missing
+    ##        sigma    1.0695    1.3914    0.0463   932.7301   986.4167    1.0000       missing
+    ##            r    1.9253    3.5847    0.1138   890.9515   856.1954    1.0011       missing
+    ##            c    8.5197   11.0111    0.3573   932.4187   924.7045    0.9998       missing
+    ##        icept   -2.5033    1.9193    0.0628   960.8012   855.9091    0.9991       missing
+    ##            Z    0.0711    0.0363    0.0013   624.8124   489.5210    0.9985       missing
     ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 4.012187140556623
+    ## Design objective value: 3.7586037586984666
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.12229596376419 minutes."
+    ## [1] "Run time: 2.41732420126597 minutes."
 
 Compute position PIPs
 
@@ -831,32 +831,32 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=2.9990586787385
+    ## Found xi=3.7956164770831458
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64       Missing
+    ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   ess_per_sec
+    ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64       Missing
     ## 
-    ##            n    6.2920    4.6982    0.1729    801.1437    660.3938    0.9994       missing
-    ##        sigma    1.0996    1.5087    0.0488    954.3218    915.9004    1.0013       missing
-    ##            r    1.1706    2.0789    0.0663    938.0808    984.8871    1.0015       missing
-    ##            c   12.7951   15.7394    0.5086    912.9581    832.9100    1.0029       missing
-    ##        icept   -3.7080    2.2189    0.0726   1001.7765    977.3993    0.9990       missing
-    ##            Z    0.0774    0.0352    0.0012    912.9056   1026.6981    1.0000       missing
+    ##            n    8.3580    5.5757    0.2740   486.5833   634.0064    0.9994       missing
+    ##        sigma    1.2131    2.6389    0.0836   974.7692   947.8873    0.9995       missing
+    ##            r    1.3353    3.3865    0.1070   780.9813   925.5921    1.0048       missing
+    ##            c   14.7808   19.5974    0.6287   832.8966   874.9447    1.0018       missing
+    ##        icept   -4.6158    2.8379    0.1011   752.9854   944.3141    1.0005       missing
+    ##            Z    0.0644    0.0279    0.0010   763.7411   955.1015    1.0010       missing
     ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.1106827540585407
+    ## Design objective value: 3.900656091862378
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.09530641635259 minutes."
+    ## [1] "Run time: 2.21298926671346 minutes."
 
 Compute position PIPs
 
@@ -895,32 +895,32 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.9304697256891674
+    ## Found xi=4.695797913586301
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64       Missing
+    ##   parameters      mean       std      mcse   ess_bulk    ess_tail      rhat   ess_per_sec
+    ##       Symbol   Float64   Float64   Float64    Float64     Float64   Float64       Missing
     ## 
-    ##            n    8.2330    5.3512    0.2545    547.7509   479.8402    1.0034       missing
-    ##        sigma    1.2494    2.6663    0.0859    936.5412   898.6857    1.0012       missing
-    ##            r    0.9001    1.6459    0.0536   1005.5432   940.8297    1.0013       missing
-    ##            c   13.6990   14.3108    0.4554    899.9172   944.7027    0.9998       missing
-    ##        icept   -6.1240    3.2857    0.1616    363.3375   797.3027    1.0032       missing
-    ##            Z    0.0641    0.0283    0.0010    721.0292   986.4167    1.0006       missing
+    ##            n    8.9870    6.0122    0.2807   463.5957    684.4223    1.0052       missing
+    ##        sigma    1.2906    2.2560    0.0711   970.3158    819.5961    1.0007       missing
+    ##            r    0.7502    1.3041    0.0410   931.6309   1029.7381    1.0004       missing
+    ##            c   11.2324   12.1161    0.4276   831.7229    906.9344    1.0021       missing
+    ##        icept   -5.0313    3.0775    0.1491   412.5317    786.9359    1.0026       missing
+    ##            Z    0.0586    0.0263    0.0010   619.8525    819.4385    1.0015       missing
     ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.1092790995851622
+    ## Design objective value: 3.3257212514051018
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.17374399900436 minutes."
+    ## [1] "Run time: 2.38936405181885 minutes."
 
 Compute position PIPs
 
@@ -959,7 +959,7 @@ Run BASS-GWAS
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.5486680271107076
+    ## Found xi=4.360467811082288
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
@@ -969,22 +969,22 @@ Run BASS-GWAS
     ##   parameters      mean       std      mcse   ess_bulk    ess_tail      rhat   ess_per_sec
     ##       Symbol   Float64   Float64   Float64    Float64     Float64   Float64       Missing
     ## 
-    ##            n    7.0380    3.7157    0.1428   705.4269    715.2635    1.0004       missing
-    ##        sigma    1.6449    3.9371    0.1237   911.1994    986.8508    1.0010       missing
-    ##            r    0.8485    2.1559    0.0676   980.9906   1029.6174    1.0016       missing
-    ##            c   16.3885   16.4174    0.5262   962.7673    875.4053    1.0041       missing
-    ##        icept   -7.7263    3.2957    0.1158   810.6976    907.3478    1.0006       missing
-    ##            Z    0.0664    0.0305    0.0011   796.8973    933.4946    1.0008       missing
+    ##            n    8.6400    4.7683    0.2008   587.9816    651.4823    1.0002       missing
+    ##        sigma    1.3757    2.6847    0.0848   912.3282   1009.3235    1.0002       missing
+    ##            r    0.6929    1.7799    0.0574   945.4394    946.8101    1.0002       missing
+    ##            c   14.2340   15.8887    0.5267   910.9898    947.1035    0.9991       missing
+    ##        icept   -7.2719    3.1599    0.0994   951.2114   1084.4687    1.0016       missing
+    ##            Z    0.0586    0.0272    0.0009   859.6082    795.0009    0.9994       missing
     ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 1.4231022987344013
+    ## Design objective value: 1.6376606108462104
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.15266360044479 minutes."
+    ## [1] "Run time: 2.29351530075073 minutes."
 
 Compute position PIPs
 
@@ -1027,11 +1027,11 @@ Inspect *parC* variants
     ## # A tibble: 137 × 8
     ##   variant      contig locus   down     up pattern_id     PIP
     ##   <chr>        <chr>  <chr>  <dbl>  <dbl>      <dbl>   <dbl>
-    ## 1 ACCATCCGCAC… WHO_N  parC  1.97e5 1.97e5       5780 0.988  
-    ## 2 TTTTGGGTAAA… WHO_N  parC  1.97e5 1.97e5       3554 0.0115 
-    ## 3 GGCGGCGATGC… WHO_N  parC  1.97e5 1.97e5       1425 0.00582
-    ## 4 ACGCAGCCGTG… WHO_N  parC  1.95e5 1.95e5       5229 0.00175
-    ## 5 CAATAGCAATT… WHO_F  parC  1.31e6 1.31e6       7243 0.00172
+    ## 1 ACCATCCGCAC… WHO_N  parC  196786 196830       5780 0.994  
+    ## 2 TTTTGGGTAAA… WHO_N  parC  196801 196842       3554 0.00398
+    ## 3 GAGATTTTGGG… WHO_N  parC  196814 196846       5553 0.00206
+    ## 4 CCATGCGCACC… WHO_N  parC  196783 196843       2103 0.00195
+    ## 5 GATGGCGGTGT… WHO_N  parC  195737 195776       1419 0.00180
     ## # ℹ 132 more rows
 
 The variants mapping to *parC* are dominated by a single unitig mapping
@@ -1051,11 +1051,11 @@ Inspect *gyrA* variants
     ## # A tibble: 217 × 8
     ##   variant      contig locus   down     up pattern_id     PIP
     ##   <chr>        <chr>  <chr>  <dbl>  <dbl>      <dbl>   <dbl>
-    ## 1 TCATCGGTAAA… WHO_N  gyrA  996715 996756       2055 0.727  
-    ## 2 TCATCGGTAAA… WHO_N  gyrA  996715 996748       5753 0.145  
-    ## 3 CGGTAAATACC… WHO_N  gyrA  996719 996756       8603 0.121  
-    ## 4 ACCACCCCCAC… WHO_N  gyrA  996727 996782       9393 0.00335
-    ## 5 TCATCAAAGAA… WHO_N  gyrA  997687 997747       4666 0.00302
+    ## 1 TCATCGGTAAA… WHO_N  gyrA  996715 996756       2055 0.718  
+    ## 2 TCATCGGTAAA… WHO_N  gyrA  996715 996748       5753 0.127  
+    ## 3 CGGTAAATACC… WHO_N  gyrA  996719 996756       8603 0.125  
+    ## 4 GACACCATCGT… WHO_N  gyrA  996756 996787       1507 0.00511
+    ## 5 TACGACACCAT… WHO_G  gyrA  995790 995822       4659 0.00463
     ## # ℹ 212 more rows
 
 The variants mapping to *gyrA* are dominated by a handful of strongly

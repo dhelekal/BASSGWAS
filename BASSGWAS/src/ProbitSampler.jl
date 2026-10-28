@@ -76,9 +76,11 @@ likelihood and adaptor storage use that type.
 - `sample_c=true`: Sample the predictor-effect variance.
 - `mcinit=100.0`: Intercept variance.
 - `eps=5.0`: Weighted-TGS regularization weight.
-- `nadapt=10000`: Number of transitions used for adaptation.
+- `nadapt=10000`: Number of transitions used for proposal adaptation; zero
+  disables all adaptation.
 - `xi_init=5.0`: Initial auxiliary-update intensity.
-- `adapt_xi=true`: Adapt the auxiliary-update intensity during warm-up.
+- `adapt_xi=true`: Also adapt the auxiliary-update intensity during warm-up.
+  When false, `xi` stays fixed while variance proposals still adapt.
 - `xi_targ=0.25`: Target fraction of total move intensity assigned to the
   auxiliary update.
 - `nu=5.0`, `lambda=0.6`: Residual-scale prior degrees of freedom and scale.
@@ -93,6 +95,8 @@ function ProbitBVSSampler(
         X::AbstractMatrix{<:Real}, Y::AbstractVector{<:Integer}, U::AbstractMatrix{<:Real}, S::AbstractVector{<:Real},
         alpha, beta; c = 6.0, sample_c = true, mcinit = 100.0, eps = 5.0, nadapt = 10000, xi_init = 5.0, adapt_xi = true, xi_targ = 0.25, nu = 5.0, lambda = 0.6, rng = Random.default_rng()
     )
+
+    nadapt isa Integer && nadapt >= 0 || throw(ArgumentError("nadapt must be a nonnegative integer"))
 
     T = _state_float_type(
         eltype(X), eltype(U), eltype(S), typeof(alpha), typeof(beta),
@@ -126,7 +130,7 @@ function ProbitBVSSampler(
 
     adaptor = RWMAdaptor(T, sample_c ? 2 : 1, 25 * div(nadapt, 12))
 
-    return ProbitBVSSampler(parState, cache, tgsstate, qcache, loglik, 0, 0, nadapt, !adapt_xi, adapt_xi, xi_targ, sample_c, adaptor, shape, scale, rng)
+    return ProbitBVSSampler(parState, cache, tgsstate, qcache, loglik, 0, 0, nadapt, iszero(nadapt), adapt_xi, xi_targ, sample_c, adaptor, shape, scale, rng)
 end
 
 """
@@ -137,7 +141,7 @@ Advance `samp` by one weighted-TGS transition.
 The first eleven transitions update only latent and continuous quantities.
 Subsequent transitions select either a predictor toggle or an auxiliary Gibbs
 and Metropolis update according to the current move intensities. When enabled,
-adaptation is disabled once the transition count exceeds `nadapt`. The sampler
+adaptation is disabled once the transition count reaches `nadapt`. The sampler
 and its RNG are mutated; the return value is not part of the public interface.
 """
 function next_step!(samp::ProbitBVSSampler)
@@ -162,7 +166,7 @@ function next_step!(samp::ProbitBVSSampler)
         update_state2!(samp.wTGSState, samp.parState, samp.scache, samp.qcache, samp.loglik)
     end
     samp.T += 1
-    if samp.T > samp.nadapt
+    if samp.T >= samp.nadapt
         samp.isadapted = true
     end
 
@@ -457,9 +461,10 @@ end
 
 Return the sampler's adaptation-completion flag.
 
-The flag is initialized to `true` when auxiliary-intensity adaptation is
-disabled. Otherwise it becomes `true` once the transition count exceeds
-`nadapt`.
+The flag is initialized to `true` only when `nadapt=0`. Otherwise it becomes
+`true` after exactly `nadapt` transitions, independently of `adapt_xi`.
+Setting `adapt_xi=false` fixes the auxiliary intensity but does not disable
+variance-proposal adaptation during warm-up.
 """
 function is_adapted(samp::ProbitBVSSampler)
     return samp.isadapted

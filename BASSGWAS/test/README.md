@@ -28,6 +28,8 @@ construction from mixed integer, rational and Float64 inputs, explicit type
 selection, dense conversion of views, shared cache inputs, and invalid shapes
 and parameter values. Complete Float64 sampler transitions exercise both
 sampled and fixed coefficient-prior variance and all adaptation stages.
+They also verify proposal adaptation with fixed or adapted `xi`, freezing at
+exactly `nadapt` transitions, and disabling all adaptation with `nadapt=0`.
 Float32 numerical validation is intentionally deferred.
 
 ## Independent numerical references

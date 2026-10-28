@@ -16,7 +16,7 @@ include("numerical_helpers.jl")
     for seed in 1:3
         sampler = ProbitBVSSampler(
             zeros(4, 0), [0, 0, 1, 1], zeros(4, 0), Float64[], 1.0, 1.0;
-            mcinit = 1.0, sample_c = false, adapt_xi = false, rng = Xoshiro(seed)
+            mcinit = 1.0, sample_c = false, nadapt = 0, adapt_xi = false, rng = Xoshiro(seed)
         )
         for _ in 1:2000
             next_step!(sampler)
