@@ -14,7 +14,7 @@
 
 """
     MLMCEig(idx_rem, Ufull, Sfull, X, icept, betas, us, weights;
-            rng=Random.default_rng(), omega=0.25, pilot_samples=48, M0=1)
+            rng=Random.default_rng(), omega=4, pilot_samples=48, M0=1)
 
 Fixed-pool antithetic multilevel Monte Carlo estimator of expected information
 gain. Candidate positions refer to the ordering of `idx_rem`, as in `CIDEIG`.
@@ -26,21 +26,23 @@ independent integer outcomes for every pool entry (including repeated source row
 Subsequent scoring is deterministic and uses only unweighted Monte Carlo means.
 
 Weights must be finite and strictly positive and are used only for resampling.
-`M0` must be a positive power of two (including one); level `l` uses `M0 * 2^l` inner
+`M0` must be a positive integer; level `l` uses `M0 * 2^l` inner
 entries plus one outer entry. The pool must support at least two level-zero
-realizations. `omega` is retained and validated for compatibility,
-but does not affect level selection under RMSE minimization. `pilot_samples`
+realizations. `omega` must be finite and strictly positive; it multiplies the
+estimated bias in both level selection and reported accuracy. `pilot_samples`
 (at least two) is the minimum number of complete realizations required to estimate
 a level's allocation moments.
 Each eligible level uses the entire pool of complete blocks in one upfront pass
 per design evaluation. Evaluating a design requires at least `(M0 + 1) * pilot_samples`
 pool entries; otherwise lower `pilot_samples` or supply more posterior draws.
 
-`eig`, `bias`, and `accuracy` describe the selected design; `accuracy` is the
-empirical RMSE, including estimated truncation bias. Level selection minimizes
-predicted RMSE using the frozen upfront moments; reported diagnostics instead use
-the selected final allocation's moments. `allocations[l+1]` counts realizations
-at level `l`, through `max_level`. Upfront moment estimates may
+`eig`, `bias`, and `accuracy` describe the selected design. `bias` is the unscaled
+truncation-bias estimate fitted to the upfront pilot means. `accuracy` is the
+bias-adjusted RMSE `sqrt(sampling_variance + (omega * bias)^2)`; with `omega=1`
+it is the ordinary estimated RMSE. Level selection minimizes this same objective
+using the frozen upfront moments. Reporting retains the selected pilot bias fit
+and estimates sampling variance from the final allocation. `allocations[l+1]`
+counts realizations at level `l`, through `max_level`. Upfront moment estimates may
 share pool entries across levels, but not within a level. Every final realization
 has its own outer entry and disjoint inner entries. Distinct entries may originate
 from the same source posterior row.
@@ -95,15 +97,11 @@ function MLMCEig(
         idx_rem::AbstractVector{<:Integer}, Ufull::AbstractMatrix{T},
         Sfull::AbstractVector{T}, X::AbstractMatrix{T}, icept::AbstractVector{T},
         betas::AbstractMatrix{T}, us::AbstractMatrix{T}, weights::AbstractVector{T};
-        rng::AbstractRNG = Random.default_rng(), omega::Real = 0.25,
+        rng::AbstractRNG = Random.default_rng(), omega::Real = 4,
         pilot_samples::Integer = 48, M0::Integer = 1
     ) where {T <: AbstractFloat}
     m = length(icept)
-    base = M0
-    while base > 1 && iseven(base)
-        base ÷= 2
-    end
-    base == 1 || throw(ArgumentError("M0 must be a positive power of two"))
+    M0 > 0 || throw(ArgumentError("M0 must be a positive integer"))
     M0 <= m ÷ 2 - 1 || throw(
         ArgumentError(
             "MLMC requires at least two level-zero realizations of M0 + 1 posterior draws each"
@@ -112,7 +110,8 @@ function MLMCEig(
     length(weights) == m || throw(DimensionMismatch("one weight is required per draw"))
     all(w -> isfinite(w) && w > 0, weights) ||
         throw(ArgumentError("posterior weights must be finite and strictly positive"))
-    0 < T(omega) < 1 || throw(ArgumentError("omega must lie strictly between zero and one"))
+    isfinite(T(omega)) && T(omega) > 0 ||
+        throw(ArgumentError("omega must be finite and strictly positive"))
     pilot_samples >= 2 || throw(ArgumentError("pilot_samples must be at least two"))
 
     lp1, lp0 = postpred(Ufull, Sfull, X, icept, betas, us)
@@ -197,9 +196,10 @@ end
 
 Allocate realization counts (not individual rows) with cost `M0 * 2^l + 1`, at least
 two per level, and continuous targets proportional to `sqrt(V_l / C_l)`.
-Integer rounding spends the maximum feasible row budget. Zero variances receive
-the minimum continuous allocation; if all variances vanish, equal surrogate
-variances determine the allocation. Rounding may add blocks at any level.
+Floor the continuous targets, then greedily add affordable blocks by variance
+reduction per row. Never remove useful blocks to spend the remaining budget;
+unused rows are allowed. This is a rounding heuristic, not an exact integer
+optimizer. Zero-variance levels retain the minimum allocation.
 """
 function allocate_draws(levels::Integer, variances::AbstractVector, ec::MLMCEig{T}) where {T}
     costs = mlmc_costs(levels, ec.M0)
@@ -209,12 +209,8 @@ function allocate_draws(levels::Integer, variances::AbstractVector, ec::MLMCEig{
     budget = size(ec.outcomes, 1)
     sum(costs) <= budget ÷ 2 || throw(ArgumentError("pool cannot support two realizations per level"))
     v = T.(variances)
-    if all(iszero, v)
-        @warn "All MLMC variances are numerically equal to 0."
-        fill!(v, one(T))
-    else
-        v ./= maximum(v)
-    end
+    all(iszero, v) && return fill(2, levels)
+    v ./= maximum(v)
     rates = sqrt.(v ./ costs)
     counts = fill(2, levels)
     active = collect(1:levels)
@@ -232,45 +228,18 @@ function allocate_draws(levels::Integer, variances::AbstractVector, ec::MLMCEig{
         remaining -= 2sum(costs[i] for i in fixed)
         active = setdiff(active, fixed)
     end
-    # Reachable extra costs identify the largest feasible spend for any M0.
-    # Integer flags avoid bit arrays; the minimum two blocks remain reserved.
-    capacity = budget - 2sum(costs)
-    reachable = zeros(Int, capacity + 1)
-    reachable[1] = 1
-    for total in 1:capacity
-        for cost in costs
-            cost > total && break
-            if reachable[total - cost + 1] == 1
-                reachable[total + 1] = 1
-                break
-            end
-        end
-    end
-    target = 2sum(costs) + findlast(==(1), reachable) - 1
-    remaining = target - sum(costs .* counts)
-    # Undo rounded blocks only if necessary to make the remainder spendable.
-    while reachable[remaining + 1] == 0
-        best, penalty = 0, T(Inf)
-        for i in eachindex(counts)
-            counts[i] > 2 || continue
-            change = v[i] / (costs[i] * T(counts[i]) * (counts[i] - 1))
-            if change < penalty
-                best, penalty = i, change
-            end
-        end
-        counts[best] -= 1
-        remaining += costs[best]
-    end
+    remaining = budget - sum(costs .* counts)
     while remaining > 0
-        best, gain = 0, -one(T)
+        best, gain = 0, zero(T)
         for i in eachindex(counts)
-            if costs[i] <= remaining && reachable[remaining - costs[i] + 1] == 1
+            if costs[i] <= remaining
                 improvement = v[i] / (costs[i] * T(counts[i]) * (counts[i] + 1))
                 if improvement > gain
                     best, gain = i, improvement
                 end
             end
         end
+        best == 0 && break
         counts[best] += 1
         remaining -= costs[best]
     end
@@ -356,21 +325,32 @@ function mlmc_allocation_moments(design, ec::MLMCEig{T}) where {T}
     return means, variances
 end
 
+"""
+Fit `log2(abs(mean_l)) = intercept - alpha * l` to the finest three nonzero
+positive-level pilot means (or all available if fewer). Extrapolate the fitted
+magnitude to the requested finest level, including when its observed mean is zero.
+With only one nonzero level, retain the first-order `alpha=1` fallback. Without
+nonzero corrections the bias is unknown, unless all pilot means and variances
+vanish. Nondecaying fits also return `Inf`.
+"""
 function mlmc_bias(means::AbstractVector{T}, variances::AbstractVector) where {T}
     length(means) == 1 && return T(Inf)
-    means[end] == 0 && variances[end] == 0 && return zero(T)
+    all(iszero, means) && all(iszero, variances) && return zero(T)
     usable = [i for i in 2:length(means) if means[i] != 0]
+    isempty(usable) && return T(Inf)
+    finest = usable[max(1, length(usable) - 2):end]
+    x = T.(finest .- 1)
+    y = log2.(abs.(means[finest]))
+    xmean, ymean = sum(x) / length(x), sum(y) / length(y)
     alpha = one(T)
-    if length(usable) >= 2
-        finest = usable[max(1, length(usable) - 2):end]
-        x = T.(finest .- 1)
-        y = log2.(abs.(means[finest]))
-        x .-= sum(x) / length(x)
-        y .-= sum(y) / length(y)
+    if length(finest) >= 2
+        x .-= xmean
+        y .-= ymean
         alpha = -sum(x .* y) / sum(abs2, x)
     end
-    alpha > 0 || return T(Inf)
-    return abs(means[end]) / expm1(alpha * log(T(2)))
+    isfinite(alpha) && alpha > 0 || return T(Inf)
+    log_magnitude = ymean - alpha * (length(means) - 1 - xmean)
+    return exp2(log_magnitude) / expm1(alpha * log(T(2)))
 end
 
 function mlmc_estimate(design, ec::MLMCEig{T}) where {T}
@@ -388,18 +368,18 @@ function mlmc_estimate(design, ec::MLMCEig{T}) where {T}
         means = @view allocation_means[1:(level + 1)]
         variances = @view allocation_variances[1:(level + 1)]
         allocations = allocate_draws(level + 1, variances, ec)
-        bias = 4 * mlmc_bias(means, variances)
+        bias = mlmc_bias(means, variances)
         sampling_variance = sum(variances ./ allocations)
-        predicted_rmse = hypot(sqrt(sampling_variance), bias)
+        predicted_rmse = hypot(sqrt(sampling_variance), ec.omega * bias)
         if isnothing(best) || predicted_rmse < best.predicted_rmse
-            best = (; predicted_rmse, allocations, max_level = level)
+            best = (; predicted_rmse, allocations, bias, max_level = level)
         end
     end
     means, variances = mlmc_moments(design, best.allocations, ec)
-    bias = mlmc_bias(means, variances)
+    bias = best.bias
     sampling_variance = sum(variances ./ best.allocations)
     return (;
-        eig = sum(means), bias, accuracy = hypot(sqrt(sampling_variance), bias),
+        eig = sum(means), bias, accuracy = hypot(sqrt(sampling_variance), ec.omega * bias),
         allocations = best.allocations, max_level = best.max_level, variances = variances,
     )
 end

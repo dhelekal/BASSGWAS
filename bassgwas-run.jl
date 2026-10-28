@@ -84,6 +84,8 @@ function parse_commandline()
         "--randdes"
         help = "An option to construct a random design instead of an optimized one"
         action = :store_true
+        "--mlmc"
+        action = :store_true
     end
 
     s.description = "Run BASSGWAS sampling and (optionally) optimise the next experimental design."
@@ -128,6 +130,7 @@ nchains = parsed["nchains"]
 pmean = parsed["p_mean"]
 pr0 = parsed["pr_0"]
 incl_next = parsed["inclnext"] !== nothing
+mlmc = parsed["mlmc"]
 
 # Save the input paths and run settings in receipt.txt for reference.
 receiptfile = outdir * "/receipt.txt"
@@ -410,9 +413,9 @@ if batch_sz > 0
 
     # Build the batch greedily by EIG, honoring any required strains first.
     # With --randdes, choose the remaining strains randomly instead.
-    ec = CIDEIG(idx_rem, U, S, X, iceptf, betasf, usf_full, Zs)
-    design = optimize_design(ec, idx_rem, batch_sz; randdes = randdes, idx_fixed = idx_fixed)
-    # Write selected strain identifiers in dataset order, one per line in design.txt.
+    ec = mlmc ? MLMCEig(idx_rem, U, S, X, iceptf, betasf, usf_full, Zs, pilot_samples = 24, M0 = 4) : CIDEIG(idx_rem, U, S, X, iceptf, betasf, usf_full, Zs)
+
+    design = optimize_design(ec, idx_rem, batch_sz; randdes = false, idx_fixed = idx_fixed)
     selected = data[sort(design[1]), 1]
 
     println("Design objective value: $(design[2])")

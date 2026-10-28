@@ -30,7 +30,7 @@ make_mlmc(f; seed = 12, weights = f.weights, pilot_samples = 16, kwargs...) =
 
 # Explicit tables allow independent checks of arithmetic and row ownership.
 function table_mlmc(
-        p; posterior_rows = collect(1:size(p, 1)), seed = 32, omega = 0.25,
+        p; posterior_rows = collect(1:size(p, 1)), seed = 32, omega = 4.0,
         outcomes = nothing, pilot_samples = 16, M0 = 1
     )
     m = size(p, 1)
@@ -83,6 +83,7 @@ end
         same = make_mlmc(f)
         lp1, lp0 = postpred(f.U, f.S, f.X, f.icept, f.betas, f.us)
         @test ec isa EIGest
+        @test ec.omega == 4
         @test ec.lp_success == lp1[ec.posterior_rows, f.idx_rem]
         @test ec.lp_fail == lp0[ec.posterior_rows, f.idx_rem]
         @test ec.outcomes isa Matrix{Int}
@@ -127,8 +128,11 @@ end
         weights[1] = bad
         @test_throws ArgumentError make_mlmc(f; weights)
     end
-    for omega in (0, 1, Inf, NaN)
+    for omega in (0, -1, Inf, -Inf, NaN)
         @test_throws ArgumentError make_mlmc(f; omega)
+    end
+    for omega in (0.25, 1, 4, 16)
+        @test make_mlmc(f; omega).omega == omega
     end
     @test_throws ArgumentError make_mlmc(f; pilot_samples = 1)
     large = make_mlmc(f; weights = 1.0e308 .* f.weights)
@@ -139,12 +143,12 @@ end
     f = mlmc_fixture()
     default = make_mlmc(f)
     @test default.M0 == 1
-    for invalid in (0, -1, -2, 3, 6, 12)
-        @test_throws "M0 must be a positive power of two" make_mlmc(f; M0 = invalid)
+    for invalid in (0, -1, -2)
+        @test_throws "M0 must be a positive integer" make_mlmc(f; M0 = invalid)
     end
     @test_throws ArgumentError make_mlmc(f; M0 = 256)
     @test_throws OverflowError BASSGWAS.mlmc_costs(64, 2)
-    for M0 in (1, 2, 4, 8)
+    for M0 in (1, 2, 3, 4, 5, 6, 8, 12)
         ec = make_mlmc(f; M0 = Int32(M0))
         @test ec.M0 === M0
         @test ec.posterior_rows == default.posterior_rows
@@ -352,22 +356,9 @@ end
     end
 end
 
-# Enumerate all attainable budgets independently of the allocator.
-function feasible_costs(costs, budget)
-    reachable = Set([2sum(costs)])
-    for total in minimum(reachable):budget
-        if total in reachable
-            for cost in costs
-                total + cost <= budget && push!(reachable, total + cost)
-            end
-        end
-    end
-    return reachable
-end
-
 @testset "MLMC allocation and disjoint partitions" begin
     rng = Xoshiro(100)
-    for M0 in (1, 2, 4, 8, 16), m in 4:100, levels in 1:4
+    for M0 in (1, 2, 3, 4, 5, 6, 8, 12, 16), m in 4:100, levels in 1:4
         costs = [M0 * 2^l + 1 for l in 0:(levels - 1)]
         2sum(costs) <= m || continue
         ec = table_mlmc(fill(0.5, m, 1); M0)
@@ -377,7 +368,11 @@ end
             )
             counts = BASSGWAS.allocate_draws(levels, v, ec)
             @test all(>=(2), counts)
-            @test sum(costs .* counts) == maximum(feasible_costs(costs, m))
+            @test sum(costs .* counts) <= m
+            @test all(counts[iszero.(v)] .== 2)
+            # Stop only when no positive-variance block fits the remainder.
+            remaining = m - sum(costs .* counts)
+            @test all(costs[i] > remaining for i in eachindex(v) if v[i] > 0)
             @test counts == BASSGWAS.allocate_draws(levels, 7 .* v, ec)
             blocks = BASSGWAS.partition_draws(counts, ec)
             rows = reduce(vcat, values(blocks))
@@ -395,6 +390,16 @@ end
                 ]
             ) == collect(1:sum(costs .* counts))
         end
+    end
+    # Leaving one row unused beats removing a useful level-zero block merely
+    # to spend the entire budget. Enumerate the feasible integer alternatives.
+    small = table_mlmc(fill(0.5, 13, 1))
+    for v in ([1.0, 0.0], [1.0, 0.01])
+        counts = BASSGWAS.allocate_draws(2, v, small)
+        feasible = [[a, b] for a in 2:6 for b in 2:4 if 2a + 3b <= 13]
+        @test counts == [3, 2]
+        @test sum(v ./ counts) == minimum(sum(v ./ n) for n in feasible)
+        @test sum(v ./ counts) < sum(v ./ [2, 3])
     end
     ec = table_mlmc(fill(0.5, 2000, 1))
     counts = BASSGWAS.allocate_draws(3, [8.0, 3.0, 1.25], ec)
@@ -426,7 +431,7 @@ function direct_allocation_moments(ec, design)
 end
 
 @testset "Upfront full-pool allocation moments" begin
-    for M0 in (1, 2, 4, 8), pilot_samples in (2, 3, 16)
+    for M0 in (1, 2, 3, 4, 6, 8), pilot_samples in (2, 3, 16)
         budgets = unique(
             [
                 max(2(M0 + 1), pilot_samples * cost + offset)
@@ -510,7 +515,14 @@ end
     @test BASSGWAS.mlmc_bias([1.0, -0.25, -0.0625, -0.015625], ones(4)) ≈ 0.015625 / 3
     @test BASSGWAS.mlmc_bias([1.0, -0.125, -0.25], ones(3)) == Inf
     @test BASSGWAS.mlmc_bias([1.0, -0.25, -0.25], ones(3)) == Inf
-    @test BASSGWAS.mlmc_bias([1.0, 0.0, 0.0], [1.0, 0.0, 0.0]) == 0
+    @test BASSGWAS.mlmc_bias([1.0, 0.0, 0.0], [1.0, 0.0, 0.0]) == Inf
+    @test BASSGWAS.mlmc_bias(zeros(3), zeros(3)) == 0
+    # A zero finest correction must not erase the fitted tail from earlier levels.
+    @test BASSGWAS.mlmc_bias([1.0, -0.5, -0.25, 0.0], [1.0, 1.0, 1.0, 0.0]) ≈ 0.125
+    @test BASSGWAS.mlmc_bias([1.0, -0.5, 0.0, -0.125], ones(4)) ≈ 0.125
+    # The fitted magnitude differs from the observed finest mean in a noisy fit.
+    @test BASSGWAS.mlmc_bias([1.0, -0.5, -0.125, -0.125], ones(4)) ≈
+        cbrt(0.5 * 0.125 * 0.125) / 2
     for m in (4, 5, 9)
         state = update_eig(make_mlmc(mlmc_fixture(m); pilot_samples = 2), 1)
         @test state.max_level == 0
@@ -521,12 +533,13 @@ end
     @test constant.eig == constant.bias == constant.accuracy == 0
     # Every positive level ties at zero predicted RMSE; prefer level one.
     @test constant.max_level == 1
-    @test sum(BASSGWAS.mlmc_costs(2, constant.M0) .* constant.allocations) == 200
+    @test constant.allocations == [2, 2]
 
     # Independently enumerate every feasible maximum level using full-pool
     # moments for selection, then verify diagnostics on the final allocation.
-    for M0 in (1, 2, 4, 8), m in (20, 47, 83, 256, 1024), design in ([1], [1, 2])
-        ec = make_mlmc(mlmc_fixture(m); pilot_samples = 2, M0)
+    for M0 in (1, 2, 3, 4, 6, 8), m in (20, 47, 83, 256, 1024),
+            design in ([1], [1, 2]), omega in (0.25, 1, 4, 16)
+        ec = make_mlmc(mlmc_fixture(m); pilot_samples = 2, M0, omega)
         allocation_means, allocation_variances = direct_allocation_moments(ec, design)
         candidates = []
         for level in 0:(length(allocation_variances) - 1)
@@ -534,24 +547,52 @@ end
             2sum(costs) <= m || break
             mu, v = allocation_means[1:(level + 1)], allocation_variances[1:(level + 1)]
             counts = BASSGWAS.allocate_draws(level + 1, v, ec)
-            bias = 4 * BASSGWAS.mlmc_bias(mu, v)
-            predicted_rmse = hypot(sqrt(sum(v ./ counts)), bias)
-            push!(candidates, (; level, counts, predicted_rmse))
+            bias = BASSGWAS.mlmc_bias(mu, v)
+            predicted_rmse = hypot(sqrt(sum(v ./ counts)), omega * bias)
+            push!(candidates, (; level, counts, bias, predicted_rmse))
         end
         expected = candidates[argmin([c.predicted_rmse for c in candidates])]
         result = BASSGWAS.mlmc_estimate(design, ec)
         @test result.max_level == expected.level
         @test result.allocations == expected.counts
         mu, v = direct_level_moments(ec, design, expected.counts)
-        bias = BASSGWAS.mlmc_bias(mu, v)
         @test result.eig ≈ sum(mu)
-        @test result.bias ≈ bias
-        @test result.accuracy ≈ hypot(sqrt(sum(v ./ expected.counts)), bias)
-        # Neither the former bias tolerance nor per-trial final moments affect
-        # the chosen allocation or the resulting final diagnostics.
-        other = make_mlmc(mlmc_fixture(m); pilot_samples = 2, omega = 1.0e-20, M0)
-        @test BASSGWAS.mlmc_estimate(design, other) == result
+        @test result.bias ≈ expected.bias
+        @test result.accuracy ≈ hypot(sqrt(sum(v ./ expected.counts)), omega * expected.bias)
     end
+    # Changing the multiplier must affect selection, not just the displayed field.
+    low = BASSGWAS.mlmc_estimate([1], make_mlmc(mlmc_fixture(); seed = 3, omega = 0.25))
+    high = BASSGWAS.mlmc_estimate([1], make_mlmc(mlmc_fixture(); seed = 3, omega = 16))
+    @test low.max_level != high.max_level
+end
+
+@testset "Pilot bias survives zero final corrections" begin
+    m = 256
+    ec = MLMCEig(
+        [1], zeros(1, 1), ones(1), zeros(1, 1), repeat([-0.7, 0.7], m ÷ 2),
+        zeros(m, 1), zeros(m, 1), repeat([0.5, 1.5], m ÷ 2);
+        rng = Xoshiro(14), pilot_samples = 16
+    )
+    result = BASSGWAS.mlmc_estimate([1], ec)
+    pilot_means, _ = BASSGWAS.mlmc_allocation_moments([1], ec)
+    final_means, final_variances = direct_level_moments(ec, [1], result.allocations)
+    @test result.max_level == 3
+    @test result.allocations[end] == 2
+    @test final_means[end] ≈ 0 atol = 1.0e-15
+    @test final_variances[end] ≈ 0 atol = 1.0e-30
+    @test pilot_means[end] < 0
+    # Independent closed-form least-squares fit for equally spaced levels 1:3.
+    logs = log2.(abs.(pilot_means[2:4]))
+    slope = (logs[3] - logs[1]) / 2
+    fitted_magnitude = exp2(mean(logs) + slope)
+    expected_bias = fitted_magnitude / (exp2(-slope) - 1)
+    @test result.bias ≈ expected_bias
+    @test result.bias > 0
+    @test result.accuracy ≈ hypot(sqrt(sum(final_variances ./ result.allocations)), 4expected_bias)
+    updated = update_eig(ec, 1)
+    @test updated.bias == result.bias
+    @test updated.accuracy == result.accuracy
+    @test updated.omega == 4
 end
 
 @testset "MLMC agreement with exact weighted EIG" begin
