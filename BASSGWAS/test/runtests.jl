@@ -48,4 +48,7 @@ using Test
     @safetestset "Experimental design constraints" begin
         include("design_tests.jl")
     end
+    @safetestset "Random-effect expansion" begin
+        include("postpred_tests.jl")
+    end
 end
