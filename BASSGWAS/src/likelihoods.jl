@@ -13,17 +13,18 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-    Aloglik
+    Aloglik{T<:AbstractFloat}
 
 Abstract interface for collapsed log-likelihood evaluators.
 
-Concrete subtypes are callable with a log-determinant term and a quadratic
-form and return the corresponding log likelihood up to an additive constant.
+Concrete subtypes accept a log-determinant term and a quadratic form of type
+`T` and return the corresponding log likelihood of type `T`, up to an additive
+constant. Consumers share this type with their parameter state and caches.
 """
-abstract type Aloglik end
+abstract type Aloglik{T <: AbstractFloat} end
 
 """
-    TDistLogLik{T} <: Aloglik
+    TDistLogLik{T} <: Aloglik{T}
 
 Collapsed Student-t log likelihood obtained after integrating over a residual
 variance with scaled-inverse-chi-squared hyperparameters.
@@ -33,7 +34,7 @@ variance with scaled-inverse-chi-squared hyperparameters.
 - `lambda`: Prior scale.
 - `n`: Number of observations.
 """
-struct TDistLogLik{T<:Real} <: Aloglik
+struct TDistLogLik{T <: AbstractFloat} <: Aloglik{T}
     nu::T
     lambda::T
     n::T
@@ -43,11 +44,12 @@ end
     TDistLogLik(nu, lambda, n)
 
 Construct a collapsed Student-t likelihood after promoting its three
-parameters to a common numeric type.
+parameters to a common floating-point type. Use `TDistLogLik{T}` to select
+the type explicitly.
 """
-function TDistLogLik(nu,lambda,n)
-    nu, lambda, n = promote(nu, lambda, n)
-    TDistLogLik(nu,lambda,n)
+function TDistLogLik(nu::Real, lambda::Real, n::Real)
+    T = _state_float_type(typeof(nu), typeof(lambda), typeof(n))
+    return TDistLogLik{T}(nu, lambda, n)
 end
 
 """
@@ -56,7 +58,10 @@ end
 Evaluate the collapsed log likelihood for log-determinant `det` and quadratic
 form `ssq`, omitting constants shared by all models.
 """
-@inline (x::TDistLogLik{T})(det::T, ssq::T) where{T} = -0.5 * det - 0.5 * (x.nu+x.n) * log(x.nu*x.lambda + ssq) 
+@inline function (x::TDistLogLik{T})(det::T, ssq::T) where {T}
+    half_t = one(T) / 2
+    return -half_t * det - half_t * (x.nu + x.n) * log(x.nu * x.lambda + ssq)
+end
 
 """
     ll_plus_a!(ll, det, ssq, a, x::TDistLogLik)
@@ -64,22 +69,23 @@ form `ssq`, omitting constants shared by all models.
 Fill `ll` with the elementwise collapsed Student-t log likelihood for `det`
 and `ssq`, adding the constant `a` to every result.
 """
-function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::TDistLogLik{T}) where{T<:Real} 
-    nu=x.nu
-    n=x.n
-    lambda=x.lambda
-    @turbo for i in axes(ll,1)
-        ll[i] = -0.5 * det[i] - 0.5 * (nu+n) * log(nu*lambda + ssq[i]) + a 
+function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::TDistLogLik{T}) where {T <: AbstractFloat}
+    nu = x.nu
+    n = x.n
+    lambda = x.lambda
+    half_t = one(T) / 2
+    return @turbo for i in axes(ll, 1)
+        ll[i] = -half_t * det[i] - half_t * (nu + n) * log(nu * lambda + ssq[i]) + a
     end
 end
 
 """
-    StdNormLogLik{T} <: Aloglik
+    StdNormLogLik{T} <: Aloglik{T}
 
 Collapsed standard-normal log likelihood for determinant and quadratic-form
 terms of element type `T`.
 """
-struct StdNormLogLik{T<:Real} <: Aloglik end
+struct StdNormLogLik{T <: AbstractFloat} <: Aloglik{T} end
 
 """
     (x::StdNormLogLik)(det, ssq)
@@ -87,7 +93,10 @@ struct StdNormLogLik{T<:Real} <: Aloglik end
 Evaluate the standard-normal log likelihood for log-determinant `det` and
 quadratic form `ssq`, omitting constants shared by all models.
 """
-(x::StdNormLogLik{T})(det::T, ssq::T) where{T} = -0.5 * det - 0.5 * ssq 
+function (x::StdNormLogLik{T})(det::T, ssq::T) where {T}
+    half_t = one(T) / 2
+    return -half_t * det - half_t * ssq
+end
 
 """
     ll_plus_a!(ll, det, ssq, a, x::StdNormLogLik)
@@ -95,8 +104,9 @@ quadratic form `ssq`, omitting constants shared by all models.
 Fill `ll` with the elementwise standard-normal log likelihood for `det` and
 `ssq`, adding the constant `a` to every result.
 """
-function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::StdNormLogLik{T}) where{T<:Real} 
-    @turbo for i in axes(ll,1)
-        ll[i] = -0.5 * det[i] - 0.5 * ssq[i] + a 
+function ll_plus_a!(ll::AbstractVector{T}, det::AbstractVector{T}, ssq::AbstractVector{T}, a::T, x::StdNormLogLik{T}) where {T <: AbstractFloat}
+    half_t = one(T) / 2
+    return @turbo for i in axes(ll, 1)
+        ll[i] = -half_t * det[i] - half_t * ssq[i] + a
     end
 end

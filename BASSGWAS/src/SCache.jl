@@ -13,144 +13,413 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-    _comp_d!(d, S, r, s)
+    FixedCovarianceData
 
-Fill `d` with the diagonal Woodbury factors for covariance eigenvalues `S`
-and positive variance multipliers `r` and `s`.
+Fixed design and covariance eigenbasis data, read-only for the cache lifetime.
+All arrays use the common element type `T` and dense storage.
+Let `n` be the observation count, `paug` the augmented predictor count, and
+`ns` the retained covariance rank. The intercept is the final design column.
+
+# Fields
+- `Xaug`: Shared `n × paug` design matrix, including the intercept.
+- `U`: Shared `n × ns` matrix of orthonormal covariance eigenvectors.
+- `S`: Shared length-`ns` vector of nonnegative covariance eigenvalues.
+- `V`: Cached `n × ns` covariance square-root factor `U * Diagonal(sqrt.(S))`.
+- `UtX`: Cached `ns × paug` projection `U' * Xaug`.
+- `sqX`: Length-`paug` vector of squared Euclidean design-column norms.
+- `n`: Number of observations.
+- `paug`: Number of augmented predictors, including the intercept.
+- `ns`: Number of retained covariance modes; may be zero.
 """
-function _comp_d!(d, S, r, s)
-    @turbo for i in axes(d,1)
-        d[i] = 1.0/s/sqrt(1.0/(S[i]*r) + 1.0/s)
-    end
+struct FixedCovarianceData{T}
+    Xaug::Matrix{T}
+    U::Matrix{T}
+    S::Vector{T}
+    V::Matrix{T}
+    UtX::Matrix{T}
+    sqX::Vector{T}
+    n::Int
+    paug::Int
+    ns::Int
 end
 
 """
-    makeSCache(ps::ParState2)
+    CovarianceState
 
-Precompute low-rank covariance and response terms for the parameter state
-`ps`.
+Quantities depending on the base covariance `C = s*I + r*U*Diagonal(S)*U'`.
+They are refreshed when either positive variance multiplier changes.
 
-The cache represents operations involving `r * U * Diagonal(S) * U' + s * I`
-without materializing its dense inverse. Predictor and response dimensions
-must agree with those stored in `ps`.
+# Fields
+- `r`: Random-effect variance multiplier used by the cached quantities.
+- `s`: Residual variance multiplier used by the cached quantities.
+- `sinv`: Cached reciprocal `1/s`.
+- `d`: Length-`ns` vector of nonnegative square roots of the Woodbury weights.
+- `d2`: Squared weights, `r*S[i] / (s * (s + r*S[i]))` for each mode.
+- `invden`: Length-`ns` vector with entries `1 / (s + r*S[i])`.
+- `QX`: `ns × paug` matrix `Diagonal(d) * UtX`.
+- `gramdiag`: Length-`paug` diagonal of `Xaug' * inv(C) * Xaug`.
+- `cdet`: Base-covariance log determinant `logdet(C)`.
+- `generation`: Covariance refresh counter used to invalidate downstream
+  products and factorizations; zero denotes uninitialized state.
 """
-function makeSCache(ps::ParState2{Tx, Ty, Tc, Tn, Tr}) where {Tx, Ty, Tc, Tn, Tr}
-    @unpack Xaug, Y, U, S, p, n, alpha, beta, c, r, s = ps
-
-    ncol = size(Y, 1)
-    ns = size(S, 1)
-    
-    V = U*Diagonal(sqrt.(S))
-    UtX = U' * Xaug
-    YtU = Y' * U
-    YtX = Y' * Xaug
-    sqX = zeros(p+1);
-    _vpacnormsq!(sqX, 1.0, Xaug, Xaug);
-
-    d = similar(S)
-    _comp_d!(d, S, r, s)
-    D = Diagonal(d)
-
-    F = 1.0/s * Y' - YtU*D*D'U'
-    QX = D*UtX
-    FX = -YtU*D*QX
-    FX .+= 1.0/s*YtX
-
-    qterm = dot(Y,F)
-    cdet = -2.0*(logabsdet(D)[1]+ns*log(s)) + sum(log.(abs.(S))) + ns*log(r) + log(s)*ncol
-
-    return SCache(S, U, V, UtX, YtU, YtX, sqX, d, F, QX, FX, cdet, qterm, p+1, ncol, ns)
+mutable struct CovarianceState{T}
+    r::T
+    s::T
+    sinv::T
+    d::Vector{T}
+    d2::Vector{T}
+    invden::Vector{T}
+    QX::Matrix{T}
+    gramdiag::Vector{T}
+    cdet::T
+    generation::UInt
 end
 
 """
-    updateSCache!(cache, ps)
+    CovarianceState{T}(r, s, ns, paug)
 
-Refresh response- and variance-dependent entries of `cache` from `ps`.
-
-The design matrix and covariance eigensystem are assumed unchanged. All
-updates are performed in place.
+Convert variance parameters to `T` and allocate covariance buffers for `ns`
+modes and `paug` augmented predictors. Generation zero marks the derived
+quantities as uninitialized until the first covariance refresh.
 """
-function updateSCache!(cache, ps)
-    @unpack Xaug, Y, p, n, alpha, beta, c, r, s = ps
-    d = cache.d 
-    S = cache.S
-    U = cache.U
-    UtX=cache.UtX
-    YtU=cache.YtU
-    YtX=cache.YtX
+function CovarianceState{T}(r, s, ns::Integer, paug::Integer) where {T <: AbstractFloat}
+    isconcretetype(T) || throw(ArgumentError("covariance element type must be concrete"))
+    r, s = T(r), T(s)
+    _positive_variance(r, "r")
+    _positive_variance(s, "s")
+    return CovarianceState{T}(
+        r, s, inv(s), zeros(T, ns), zeros(T, ns), zeros(T, ns),
+        zeros(T, ns, paug), zeros(T, paug), zero(T), UInt(0)
+    )
+end
 
-    ns = cache.ns
-    n = cache.n
+"""
+    ResponseState
 
-    _comp_d!(d, S, r, s)
-    D = Diagonal(d)
-    D2 = D*D
+Single-response projections and covariance-adjusted forms. Projections change
+when the response changes; `weighted`, `fx` and `qterm` also change when the
+base covariance changes.
 
-    sinv = 1.0/s
+# Fields
+- `yu`: Length-`ns` projection `U' * Y`.
+- `yx`: Length-`paug` cross-product `Xaug' * Y`.
+- `yty`: Squared response norm `dot(Y, Y)`.
+- `perp2`: Squared norm of the orthogonal residual `Y - U * yu`.
+- `weighted`: Length-`ns` workspace holding `d2 .* yu`.
+- `residual`: Length-`n` buffer holding `Y - U * yu` after response refresh.
+- `fx`: Length-`paug` vector `Xaug' * inv(C) * Y`.
+- `qterm`: Base-covariance response quadratic form `Y' * inv(C) * Y`.
+- `generation`: Response refresh counter used to invalidate active response
+  solves; covariance-only refreshes do not increment it.
+"""
+mutable struct ResponseState{T}
+    yu::Vector{T}
+    yx::Vector{T}
+    yty::T
+    perp2::T
+    weighted::Vector{T}
+    residual::Vector{T}
+    fx::Vector{T}
+    qterm::T
+    generation::UInt
+end
 
-    Octavian.matmul!(YtX, Y', Xaug)
-    Octavian.matmul!(YtU, Y', U)
+"""
+    ResponseState{T}(n, ns, paug)
 
-    YD = YtU * D2
-    copy!(cache.F, Y')
-    Octavian.matmul!(cache.F', U, YD', -1.0, sinv)
-    
-    copy!(cache.FX, YtX)
-    Octavian.matmul!(cache.FX', UtX', YD', -1.0, sinv)
-
-    # `lmul!` lacks a three-argument form, so copy before scaling in place.
-    copy!(cache.QX, UtX)
-    lmul!(D, cache.QX)
-
-    cache.cdet = -2.0*(logabsdet(D)[1]+ns*log(s))+ ns*log(r) + log(s)*n
-    for i in eachindex(S)
-         cache.cdet += log(abs(S[i]))
-    end
-
-    cache.qterm = dot(Y,cache.F)
+Allocate response buffers and initialize scalar storage using `T`, for `n`
+observations, `ns` covariance modes and `paug` augmented predictors. Generation
+zero marks the response quantities as uninitialized until the first refresh.
+"""
+function ResponseState{T}(n::Integer, ns::Integer, paug::Integer) where {T <: AbstractFloat}
+    isconcretetype(T) || throw(ArgumentError("response element type must be concrete"))
+    zero_t = zero(T)
+    return ResponseState{T}(
+        zeros(T, ns), zeros(T, paug), zero_t, zero_t, zeros(T, ns),
+        zeros(T, n), zeros(T, paug), zero_t, UInt(0)
+    )
 end
 
 """
     SCache
 
-Cache low-rank covariance terms used in collapsed likelihoods and rank-one
-predictor updates.
+Model-independent low-rank covariance cache. `data` contains fixed design and
+orthonormal eigenbasis data, `covariance` depends only on positive `r, s`, and
+`response` contains projections of the current single response. Fixed input
+arrays are shared read-only; reconstruct the cache if they change. Updates
+are not safe concurrently on the same cache; independent samplers own their
+mutable storage.
 
-`U` and `S` are assumed to be a possibly truncated eigendecomposition of a
-positive-semidefinite covariance matrix, with positive `r` and `s` supplied
-through the associated parameter state.
+Legacy read-only properties (`U`, `S`, `V`, `UtX`, `YtU`, `YtX`, `FX`, `QX`,
+`d`, `sqX`, `cdet`, `qterm` and dimensions) remain available. Response row
+properties are transpose views of ordinary vectors. 
 
 # Fields
-- `S`, `U`: Covariance eigenvalues and eigenvectors.
-- `V`: Covariance square-root factor `U * Diagonal(sqrt.(S))`.
-- `UtX`, `YtU`, `YtX`: Cached design and response cross-products.
-- `sqX`: Squared Euclidean norm of each augmented-design column.
-- `d`: Diagonal Woodbury factors.
-- `F`: Product of the transposed response with the inverse base covariance.
-- `QX`: Scaled eigenvector-design cross-product.
-- `FX`: Product of `F` with the augmented design.
-- `cdet`: Cached covariance log-determinant contribution.
-- `qterm`: Cached response quadratic-form contribution.
-- `paug`, `n`, `ns`: Augmented predictor, response, and retained-rank sizes.
+- `data`: Fixed design/eigenbasis inputs, cross-products and dimensions in a
+  `FixedCovarianceData` object.
+- `covariance`: `CovarianceState` containing variance-dependent weights,
+  adjusted design products and the covariance generation counter.
+- `response`: `ResponseState` containing current response projections,
+  adjusted forms, reusable buffers and the response generation counter.
 """
-mutable struct SCache{Tv, Tm, Ta, Tr, Tn}
-    S::Tv
-    U::Tm
-    V::Tm
-    UtX::Tm    
-    YtU::Ta
-    YtX::Ta
-    sqX::Tv
-    
-    d::Tv
-    F::Ta
-    QX::Tm
-    
-    FX::Ta
-    
-    cdet::Tr
-    qterm::Tr
-    paug::Tn
-    n::Tn
-    ns::Tn
+struct SCache{D, T}
+    data::D
+    covariance::CovarianceState{T}
+    response::ResponseState{T}
+end
+
+Base.propertynames(::SCache, private::Bool = false) =
+    (
+    :data, :covariance, :response, :S, :U, :V, :UtX, :sqX, :n, :paug, :ns,
+    :d, :QX, :cdet, :YtU, :YtX, :FX, :qterm,
+)
+
+@inline function Base.getproperty(sc::SCache, name::Symbol)
+    if name in (:S, :U, :V, :UtX, :sqX, :n, :paug, :ns)
+        return getproperty(getfield(sc, :data), name)
+    elseif name in (:d, :QX, :cdet)
+        return getproperty(getfield(sc, :covariance), name)
+    elseif name === :YtU
+        return transpose(getfield(sc, :response).yu)
+    elseif name === :YtX
+        return transpose(getfield(sc, :response).yx)
+    elseif name === :FX
+        return transpose(getfield(sc, :response).fx)
+    elseif name === :qterm
+        return getfield(sc, :response).qterm
+    end
+    return getfield(sc, name)
+end
+
+# Use log space only outside the safe direct-ratio range. This handles zero
+# modes and avoids overflow in r*S or r*S/s for otherwise finite inputs.
+function _covariance_weights!(d, d2, invden, S, r, s, n)
+
+    _positive_variance(r, "r")
+    _positive_variance(s, "s")
+    sinv = inv(s)
+    cdet = n * log(s)
+
+    for i in eachindex(S)
+        t = r * S[i] / s
+
+        if isfinite(t) && (t > 0 || S[i] == 0)
+            w = t / (1 + t)
+            ld = log1p(t)
+            invden[i] = sinv / (1 + t)
+        else
+            z = log(r) + log(S[i]) - log(s)
+            ld = log1pexp(z)
+            w = logistic(z)
+            invden[i] = exp(-log(s) - ld)
+        end
+
+        d2[i] = w * sinv
+        d[i] = sqrt(d2[i])
+        cdet += ld
+    end
+
+    return cdet
+end
+
+# Compatibility for the stand-alone numerical helpers.
+function _comp_d!(d, S, r, s)
+    _positive_variance(r, "r")
+    _positive_variance(s, "s")
+
+    for i in eachindex(d, S)
+        z = S[i] == 0 ? -Inf : log(r) + log(S[i]) - log(s)
+        d[i] = sqrt(logistic(z) / s)
+    end
+
+    return nothing
+end
+
+function _scaled_columns!(context, lo, hi, worker)
+    (; covariance, data) = context
+    QX, UtX, d = covariance.QX, data.UtX, covariance.d
+    T = eltype(QX)
+    zero_t = zero(T)
+
+    @inbounds for j in lo:hi
+        q = zero_t
+
+        @turbo for i in axes(QX, 1)
+            v = d[i] * UtX[i, j]
+            QX[i, j] = v
+            q += v * v
+        end
+
+        g = covariance.sinv * data.sqX[j] - q
+        # Avoid catastrophic cancellation when the column is nearly entirely
+        # explained by covariance modes with very large variance.
+        if g <= 64eps(T) * covariance.sinv * data.sqX[j]
+            g = zero_t
+
+            for row in axes(data.Xaug, 1)
+                v = data.Xaug[row, j]
+
+                for i in axes(UtX, 1)
+                    v -= data.U[row, i] * UtX[i, j]
+                end
+
+                g += covariance.sinv * v * v
+            end
+
+            for i in axes(UtX, 1)
+                g += covariance.invden[i] * UtX[i, j]^2
+            end
+        end
+        covariance.gramdiag[j] = g
+    end
+
+    return 0
+end
+
+# Refresh covariance shur complement terms
+function _refresh_covariance!(sc, r, s)
+
+    covariance, data = sc.covariance, sc.data
+    T = typeof(covariance.r)
+    _positive_variance(r, "r")
+    _positive_variance(s, "s")
+    r, s = convert(T, r), convert(T, s)
+
+    if covariance.generation != 0 && r == covariance.r && s == covariance.s
+        return false
+    end
+
+    covariance.cdet = _covariance_weights!(covariance.d, covariance.d2, covariance.invden, data.S, r, s, data.n)
+    covariance.r, covariance.s, covariance.sinv = r, s, inv(s)
+
+    threaded = Threads.nthreads() > 1 && data.ns * data.paug >= CACHE_THREAD_WORK
+    foreach_block!(
+        _scaled_columns!, (; covariance, data), data.paug;
+        blocksize = threaded ? CACHE_BLOCK_COLUMNS : max(data.paug, 1),
+        workers = threaded ? Threads.nthreads() : 1
+    )
+
+    covariance.generation += UInt(1)
+    return true
+end
+
+#Update Covariance - Y projections
+function _refresh_response_terms!(sc)
+    covariance, response, data = sc.covariance, sc.response, sc.data
+
+    @inbounds @turbo for i in eachindex(response.weighted)
+        response.weighted[i] = covariance.d2[i] * response.yu[i]
+    end
+
+    copyto!(response.fx, response.yx)
+
+    if data.ns > 0
+        _column_dots!(response.fx, data.UtX, response.weighted, -one(covariance.s), covariance.sinv)
+    else
+        response.fx .*= covariance.sinv
+    end
+    # Orthogonal-complement form avoids subtracting two nearly equal norms.
+    q = covariance.sinv * response.perp2
+
+    for i in eachindex(response.yu)
+        q += covariance.invden[i] * response.yu[i]^2
+    end
+
+    response.qterm = q
+
+    return nothing
+end
+
+"""Refresh response projections and dependent terms, including in-place Y changes."""
+function update_response!(sc::SCache, Y)
+    data, response = sc.data, sc.response
+    T = eltype(response.yx)
+    one_t = one(T)
+    Y isa AbstractVector && length(Y) == data.n || throw(DimensionMismatch("response must be a vector of the original length"))
+
+    _column_dots!(response.yx, data.Xaug, Y, one_t, zero(T))
+    copyto!(response.residual, Y)
+
+    if data.ns > 0
+        mul!(response.yu, transpose(data.U), Y)
+        mul!(response.residual, data.U, response.yu, -one_t, one_t)
+    end
+
+    response.yty = dot(Y, Y)
+    response.perp2 = dot(response.residual, response.residual)
+    response.generation += UInt(1)
+    _refresh_response_terms!(sc)
+
+    return nothing
+end
+
+"""Refresh covariance-dependent terms without repeating response projections."""
+function update_covariance!(sc::SCache, r, s)
+    _refresh_covariance!(sc, r, s) && _refresh_response_terms!(sc)
+    return nothing
+end
+
+"""
+    makeSCache(ps)
+
+Construct a cache for fixed Xaug and an orthonormal eigenbasis U. Eigenvalues
+must be finite and nonnegative; an empty basis is supported. No orthogonality
+check is performed in the hot path.
+"""
+function makeSCache(ps::ParState2{T}) where {T}
+
+    Xaug, Y, U, S = ps.Xaug, ps.Y, ps.U, ps.S
+    n, paug = size(Xaug)
+
+    n > 0 && paug > 0 && Y isa AbstractVector && size(U, 1) == n && length(Y) == n && size(U, 2) == length(S) &&
+        length(S) <= n && ps.n == n && ps.p + 1 == paug ||
+        throw(DimensionMismatch("design, response and eigenbasis dimensions disagree"))
+
+    all(x -> isfinite(x) && x >= 0, S) || throw(ArgumentError("eigenvalues must be finite and nonnegative"))
+
+    _positive_variance(ps.r, "r")
+    _positive_variance(ps.s, "s")
+
+    ns = length(S)
+    V = Matrix{T}(undef, n, ns)
+
+    for j in 1:ns, i in 1:n
+        V[i, j] = U[i, j] * sqrt(S[j])
+    end
+
+    UtX = Matrix{T}(undef, ns, paug)
+    ns > 0 && mul!(UtX, transpose(U), Xaug)
+    sqX = zeros(T, paug)
+
+    for j in 1:paug
+        v = zero(T)
+        @inbounds @turbo for i in 1:n
+            v += abs2(Xaug[i, j])
+        end
+        sqX[j] = v
+    end
+
+    data = FixedCovarianceData(Xaug, U, S, V, UtX, sqX, n, paug, ns)
+    covariance = CovarianceState{T}(ps.r, ps.s, ns, paug)
+    response = ResponseState{T}(n, ns, paug)
+    sc = SCache(data, covariance, response)
+
+    updateSCache!(sc, ps)
+
+    return sc
+end
+
+"""
+    updateSCache!(sc, ps)
+
+Compatibility refresh. Always refresh the response (which may have changed
+in place); refresh covariance-only arrays only when r or s changes. Replacing
+fixed arrays requires a new cache.
+"""
+function updateSCache!(sc::SCache, ps)
+    ps.Xaug === sc.data.Xaug && ps.U === sc.data.U && ps.S === sc.data.S ||
+        throw(ArgumentError("fixed data changed; construct a new SCache"))
+    _refresh_covariance!(sc, ps.r, ps.s)
+    update_response!(sc, ps.Y)
+    return nothing
 end
