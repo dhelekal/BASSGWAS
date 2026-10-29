@@ -45,4 +45,10 @@ using Test
     @safetestset "Full-model regressions" begin
         include("boundary_regression_tests.jl")
     end
+    @safetestset "Experimental design constraints" begin
+        include("design_tests.jl")
+    end
+    @safetestset "Random-effect expansion" begin
+        include("postpred_tests.jl")
+    end
 end

@@ -3,6 +3,43 @@
 
 include("numerical_helpers.jl")
 
+@testset "Full probit posterior under shift augmentation" begin
+    # With only an intercept b ~ Normal(0, 1) and two outcomes of each class,
+    # the marginal posterior is proportional to phi(b) Phi(b)^2 Phi(-b)^2.
+    # Numerical integration is independent of the latent-variable sampler.
+    grid = collect(-8.0:0.001:8.0)
+    normal = Normal()
+    density = pdf.(normal, grid) .* cdf.(normal, grid) .^ 2 .* cdf.(normal, -grid) .^ 2
+    expected_second_moment = sum(density .* grid .^ 2) / sum(density)
+
+    batch_means = Float64[]
+    for seed in 1:3
+        sampler = ProbitBVSSampler(
+            zeros(4, 0), [0, 0, 1, 1], zeros(4, 0), Float64[], 1.0, 1.0;
+            mcinit = 1.0, sample_c = false, nadapt = 0, adapt_xi = false, rng = Xoshiro(seed)
+        )
+        for _ in 1:2000
+            next_step!(sampler)
+        end
+        for _ in 1:40
+            total = 0.0
+            for _ in 1:500
+                next_step!(sampler)
+                total += get_state(sampler).icept^2
+            end
+            push!(batch_means, total / 500)
+        end
+    end
+    estimate = sum(batch_means) / length(batch_means)
+    # Batch means account for serial dependence
+    se = sqrt(
+        sum((batch_means .- estimate) .^ 2) /
+            (length(batch_means) * (length(batch_means) - 1))
+    )
+    @test 6se < 0.03
+    @test abs(estimate - expected_second_moment) < 6se + 0.001
+end
+
 @testset "Gaussian coefficient conditional moments" begin
     for rank in (3, 8), mask in (0, 5, 15)
         @testset "rank=$rank model=$mask" begin

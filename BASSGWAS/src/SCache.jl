@@ -244,7 +244,7 @@ function _scaled_columns!(context, lo, hi, worker)
     @inbounds for j in lo:hi
         q = zero_t
 
-        @simd for i in axes(QX, 1)
+        @turbo for i in axes(QX, 1)
             v = d[i] * UtX[i, j]
             QX[i, j] = v
             q += v * v
@@ -307,7 +307,7 @@ end
 function _refresh_response_terms!(sc)
     covariance, response, data = sc.covariance, sc.response, sc.data
 
-    @inbounds @simd for i in eachindex(response.weighted)
+    @inbounds @turbo for i in eachindex(response.weighted)
         response.weighted[i] = covariance.d2[i] * response.yu[i]
     end
 
@@ -393,7 +393,7 @@ function makeSCache(ps::ParState2{T}) where {T}
 
     for j in 1:paug
         v = zero(T)
-        @inbounds @simd for i in 1:n
+        @inbounds @turbo for i in 1:n
             v += abs2(Xaug[i, j])
         end
         sqX[j] = v

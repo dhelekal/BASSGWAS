@@ -76,11 +76,14 @@ likelihood and adaptor storage use that type.
 - `sample_c=true`: Sample the predictor-effect variance.
 - `mcinit=100.0`: Intercept variance.
 - `eps=5.0`: Weighted-TGS regularization weight.
-- `nadapt=10000`: Number of transitions used for adaptation.
+- `nadapt=10000`: Number of transitions used for proposal adaptation; zero
+  disables all adaptation.
 - `xi_init=5.0`: Initial auxiliary-update intensity.
-- `adapt_xi=true`: Adapt the auxiliary-update intensity during warm-up.
+- `adapt_xi=true`: Also adapt the auxiliary-update intensity during warm-up.
+  Adapted intensities are bounded below by `floatmin(T)` to keep them positive.
+  When false, `xi` stays fixed while variance proposals still adapt.
 - `xi_targ=0.25`: Target fraction of total move intensity assigned to the
-  auxiliary update.
+  auxiliary update; must be finite and between zero and one inclusive.
 - `nu=5.0`, `lambda=0.6`: Residual-scale prior degrees of freedom and scale.
 - `rng=Random.default_rng()`: Random-number generator owned and advanced by
   the sampler.
@@ -94,6 +97,8 @@ function ProbitBVSSampler(
         alpha, beta; c = 6.0, sample_c = true, mcinit = 100.0, eps = 5.0, nadapt = 10000, xi_init = 5.0, adapt_xi = true, xi_targ = 0.25, nu = 5.0, lambda = 0.6, rng = Random.default_rng()
     )
 
+    nadapt isa Integer && nadapt >= 0 || throw(ArgumentError("nadapt must be a nonnegative integer"))
+
     T = _state_float_type(
         eltype(X), eltype(U), eltype(S), typeof(alpha), typeof(beta),
         typeof(c), typeof(mcinit), typeof(eps), typeof(xi_init),
@@ -102,6 +107,8 @@ function ProbitBVSSampler(
     one_t = one(T)
     initial_floor = T(1.0e-8)
     alpha, beta, nu, lambda, eps, xi_init, xi_targ = T.((alpha, beta, nu, lambda, eps, xi_init, xi_targ))
+    isfinite(xi_targ) && zero(T) <= xi_targ <= one_t ||
+        throw(ArgumentError("xi_targ must be a finite fraction between zero and one"))
     p = size(X, 2)
     n = size(Y, 1)
 
@@ -126,7 +133,7 @@ function ProbitBVSSampler(
 
     adaptor = RWMAdaptor(T, sample_c ? 2 : 1, 25 * div(nadapt, 12))
 
-    return ProbitBVSSampler(parState, cache, tgsstate, qcache, loglik, 0, 0, nadapt, !adapt_xi, adapt_xi, xi_targ, sample_c, adaptor, shape, scale, rng)
+    return ProbitBVSSampler(parState, cache, tgsstate, qcache, loglik, 0, 0, nadapt, iszero(nadapt), adapt_xi, xi_targ, sample_c, adaptor, shape, scale, rng)
 end
 
 """
@@ -137,7 +144,7 @@ Advance `samp` by one weighted-TGS transition.
 The first eleven transitions update only latent and continuous quantities.
 Subsequent transitions select either a predictor toggle or an auxiliary Gibbs
 and Metropolis update according to the current move intensities. When enabled,
-adaptation is disabled once the transition count exceeds `nadapt`. The sampler
+adaptation is disabled once the transition count reaches `nadapt`. The sampler
 and its RNG are mutated; the return value is not part of the public interface.
 """
 function next_step!(samp::ProbitBVSSampler)
@@ -154,15 +161,19 @@ function next_step!(samp::ProbitBVSSampler)
         if !samp.isadapted && samp.adapt_xi
             xi_targ = samp.xi_targ
             xi = samp.wTGSState.xi
-            rs = samp.wTGSState.rsums[end]
-            samp.wTGSState.xi = xi + (xi_targ - xi / rs) / (sqrt(samp.T))
+            logtot = samp.wTGSState.logtot
+            # Guard against negative xi
+            samp.wTGSState.xi = max(
+                floatmin(typeof(xi)),
+                xi + (xi_targ - exp(log(xi) - logtot)) / sqrt(samp.T)
+            )
         end
     else
         gibbs_CG!(samp)
         update_state2!(samp.wTGSState, samp.parState, samp.scache, samp.qcache, samp.loglik)
     end
     samp.T += 1
-    if samp.T > samp.nadapt
+    if samp.T >= samp.nadapt
         samp.isadapted = true
     end
 
@@ -297,11 +308,13 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         mu = rand(rng, Normal(zero_t, sig))
         Y_new .+= mu
         sqI1, YI1 = shift_terms!(qc, sc, Y_new)
-        tauup = (one_t / sig * sig + sqI1)
+        # Normal's second argument is a standard deviation, so its precision is 1/sig^2.
+        tauup = one_t / sig^2 + sqI1
         sigup = one_t / tauup
         muup = YI1 * sigup
-        lo = maximum(Y_new[findall(signs .< 0.0)])
-        up = minimum(Y_new[findall(signs .> 0.0)])
+        # An absent outcome class imposes no bound on that side of the shift.
+        lo = maximum(Y_new[findall(signs .< 0.0)]; init = T(-Inf))
+        up = minimum(Y_new[findall(signs .> 0.0)]; init = T(Inf))
         mu_new = rand(rng, truncated(Normal(muup, sqrt(sigup)), lower = lo, upper = up))
         Y_new .-= mu_new
     end
@@ -417,9 +430,8 @@ function get_state(samp::ProbitBVSSampler)
 
     γ = samp.wTGSState.γ
     pips = samp.wTGSState.pips
-    rates = samp.wTGSState.rates
     # Reciprocal total move rate is the weighted-TGS importance weight.
-    Z = 1.0 / sum(rates)
+    Z = exp(-samp.wTGSState.logtot)
 
     Y = copy(ps.Y)
     r = ps.r
@@ -456,9 +468,10 @@ end
 
 Return the sampler's adaptation-completion flag.
 
-The flag is initialized to `true` when auxiliary-intensity adaptation is
-disabled. Otherwise it becomes `true` once the transition count exceeds
-`nadapt`.
+The flag is initialized to `true` only when `nadapt=0`. Otherwise it becomes
+`true` after exactly `nadapt` transitions, independently of `adapt_xi`.
+Setting `adapt_xi=false` fixes the auxiliary intensity but does not disable
+variance-proposal adaptation during warm-up.
 """
 function is_adapted(samp::ProbitBVSSampler)
     return samp.isadapted
