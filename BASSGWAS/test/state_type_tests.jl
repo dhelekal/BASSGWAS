@@ -228,3 +228,46 @@ end
         @test sampler.wTGSState.xi == initial_xi
     end
 end
+
+@testset "Auxiliary adaptation preserves positive finite intensities" begin
+    X = zeros(4, 1)
+    Y = [0, 1, 0, 1]
+    U, S = zeros(4, 0), Float64[]
+    for target in (-0.1, 1.1, NaN, Inf, -Inf)
+        @test_throws ArgumentError ProbitBVSSampler(X, Y, U, S, 1.0, 2.0; xi_targ = target)
+    end
+    for p in (0, 1), eps in (0.0, 0.1), xi_init in (0.05, 1e-12), target in (0.0, 0.25, 1.0)
+        sampler = ProbitBVSSampler(X[:, 1:p], Y, U, S, 1.0, 1000.0;
+            eps, xi_init, xi_targ = target, nadapt = 40, rng = Xoshiro(1))
+        for _ in 1:40
+            next_step!(sampler)
+            @test isfinite(sampler.wTGSState.xi) && sampler.wTGSState.xi > 0
+            @test isfinite(sampler.wTGSState.logtot)
+        end
+        @test is_adapted(sampler)
+        frozen = sampler.wTGSState.xi
+        for _ in 1:12
+            next_step!(sampler)
+            @test sampler.wTGSState.xi == frozen
+            @test isfinite(sampler.wTGSState.logtot)
+        end
+    end
+    # A zero initial auxiliary intensity remains supported when predictors exist.
+    sampler = ProbitBVSSampler(X, Y, U, S, 1.0, 2.0;
+        xi_init = 0.0, nadapt = 24, rng = Xoshiro(2))
+    for _ in 1:24
+        next_step!(sampler)
+    end
+    @test sampler.wTGSState.xi > 0 && isfinite(sampler.wTGSState.xi)
+
+    # Updates that already stay positive retain the original additive formula.
+    sampler = ProbitBVSSampler(X[:, 1:0], Y, U, S, 1.0, 2.0;
+        xi_init = 5.0, nadapt = 24, rng = Xoshiro(3))
+    for _ in 1:11
+        next_step!(sampler)
+    end
+    oldxi = sampler.wTGSState.xi
+    next_step!(sampler)
+    expected = oldxi + (sampler.xi_targ - 1.0) / sqrt(11)
+    @test sampler.wTGSState.xi ≈ expected
+end

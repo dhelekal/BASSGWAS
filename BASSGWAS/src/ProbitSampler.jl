@@ -80,9 +80,10 @@ likelihood and adaptor storage use that type.
   disables all adaptation.
 - `xi_init=5.0`: Initial auxiliary-update intensity.
 - `adapt_xi=true`: Also adapt the auxiliary-update intensity during warm-up.
+  Adapted intensities are bounded below by `floatmin(T)` to keep them positive.
   When false, `xi` stays fixed while variance proposals still adapt.
 - `xi_targ=0.25`: Target fraction of total move intensity assigned to the
-  auxiliary update.
+  auxiliary update; must be finite and between zero and one inclusive.
 - `nu=5.0`, `lambda=0.6`: Residual-scale prior degrees of freedom and scale.
 - `rng=Random.default_rng()`: Random-number generator owned and advanced by
   the sampler.
@@ -106,6 +107,8 @@ function ProbitBVSSampler(
     one_t = one(T)
     initial_floor = T(1.0e-8)
     alpha, beta, nu, lambda, eps, xi_init, xi_targ = T.((alpha, beta, nu, lambda, eps, xi_init, xi_targ))
+    isfinite(xi_targ) && zero(T) <= xi_targ <= one_t ||
+        throw(ArgumentError("xi_targ must be a finite fraction between zero and one"))
     p = size(X, 2)
     n = size(Y, 1)
 
@@ -159,7 +162,11 @@ function next_step!(samp::ProbitBVSSampler)
             xi_targ = samp.xi_targ
             xi = samp.wTGSState.xi
             logtot = samp.wTGSState.logtot
-            samp.wTGSState.xi = xi + (xi_targ - exp(log(xi) - logtot)) / (sqrt(samp.T))
+            # Guard against negative xi
+            samp.wTGSState.xi = max(
+                floatmin(typeof(xi)),
+                xi + (xi_targ - exp(log(xi) - logtot)) / sqrt(samp.T)
+            )
         end
     else
         gibbs_CG!(samp)
