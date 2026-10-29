@@ -3,6 +3,29 @@
 
 include("numerical_helpers.jl")
 
+@testset "Single-class phenotypes preserve liability signs" begin
+    for n in (1, 4), outcome in (0, 1), p in (0, 1), sample_c in (false, true)
+        @testset "n=$n outcome=$outcome p=$p sample_c=$sample_c" begin
+            X = reshape([i / n - 0.5 for i in 1:n], n, 1)[:, 1:p]
+            U = p == 0 ? zeros(n, 0) : fill(inv(sqrt(n)), n, 1)
+            S = p == 0 ? Float64[] : [0.8]
+            sampler = ProbitBVSSampler(X, fill(outcome, n), U, S, 1.0, 2.0;
+                sample_c, nadapt = 0, xi_init = 100.0, rng = Xoshiro(418))
+            # Cover startup and ordinary transitions, with all continuous moves enabled.
+            for _ in 1:24
+                next_step!(sampler)
+                @test all(isfinite, sampler.parState.Y)
+                @test all(y -> outcome == 1 ? y > 0 : y < 0, sampler.parState.Y)
+                @test isfinite(sampler.wTGSState.logtot)
+            end
+            draw = get_state(sampler)
+            @test all(isfinite, draw.Y)
+            @test all(y -> outcome == 1 ? y > 0 : y < 0, draw.Y)
+            @test all(isfinite, (draw.icept, draw.sigma, draw.r, draw.c, draw.Z))
+        end
+    end
+end
+
 function capture_update(f)
     return try
         f()

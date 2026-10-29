@@ -305,8 +305,9 @@ function gibbs_CG!(samp::ProbitBVSSampler)
         tauup = one_t / sig^2 + sqI1
         sigup = one_t / tauup
         muup = YI1 * sigup
-        lo = maximum(Y_new[findall(signs .< 0.0)])
-        up = minimum(Y_new[findall(signs .> 0.0)])
+        # An absent outcome class imposes no bound on that side of the shift.
+        lo = maximum(Y_new[findall(signs .< 0.0)]; init = T(-Inf))
+        up = minimum(Y_new[findall(signs .> 0.0)]; init = T(Inf))
         mu_new = rand(rng, truncated(Normal(muup, sqrt(sigup)), lower = lo, upper = up))
         Y_new .-= mu_new
     end
