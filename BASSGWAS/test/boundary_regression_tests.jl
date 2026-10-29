@@ -43,7 +43,7 @@ end
                 @test isapprox(state.llrs, ref.llrs; rtol = NUM_RTOL, atol = NUM_ATOL)
                 @test isapprox(state.pips, ref.pips; rtol = NUM_RTOL, atol = NUM_ATOL)
                 @test isapprox(state.conds, ref.conds; rtol = NUM_RTOL, atol = NUM_ATOL)
-                @test isapprox(state.rates, [ref.rates; 1.3]; rtol = NUM_RTOL, atol = NUM_ATOL)
+                @test isapprox(exp.(state.logrates), [ref.rates; 1.3]; rtol = NUM_RTOL, atol = NUM_ATOL)
             end
 
             # Also reproduce the failure when a valid non-full model is updated
@@ -59,7 +59,7 @@ end
                 @test isapprox(state.llrs, ref.llrs; rtol = NUM_RTOL, atol = NUM_ATOL)
                 @test isapprox(state.pips, ref.pips; rtol = NUM_RTOL, atol = NUM_ATOL)
                 @test isapprox(state.conds, ref.conds; rtol = NUM_RTOL, atol = NUM_ATOL)
-                @test isapprox(state.rates, [ref.rates; 1.3]; rtol = NUM_RTOL, atol = NUM_ATOL)
+                @test isapprox(exp.(state.logrates), [ref.rates; 1.3]; rtol = NUM_RTOL, atol = NUM_ATOL)
             end
         end
     end

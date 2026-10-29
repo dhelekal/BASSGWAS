@@ -111,7 +111,7 @@ end
         @test state.eps === 0.0 && state.xi === 1.0
         @test all(
             name -> getfield(state, name) isa Vector{Float64},
-            (:dets, :ssq, :llrs, :pips, :conds, :rates, :rsums)
+            (:dets, :ssq, :llrs, :pips, :conds, :logrates, :rsums)
         )
         @test qc isa BASSGWAS.QCache{Float64}
         @test isapprox(
@@ -140,7 +140,7 @@ end
     # No selectable predictors: only the auxiliary move remains.
     ps0 = numerical_fixture(0)
     state0, _ = BASSGWAS.init_state2(ll, ps0, BASSGWAS.makeSCache(ps0), Int[])
-    @test state0.rates == [1.0] && state0.rsums == [1.0]
+    @test exp.(state0.logrates) == [1.0] && state0.rsums == [1.0]
 end
 
 @testset "Float64 sampler transitions and adaptation" begin
@@ -190,7 +190,7 @@ end
             @test !is_adapted(sampler)
             if !adapt_xi
                 @test sampler.wTGSState.xi == 1.0
-                @test sampler.wTGSState.rates[end] == 1.0
+                @test sampler.wTGSState.logrates[end] == 0.0
             end
         end
         @test snapshot(sampler.adaptor) != initial_adaptor

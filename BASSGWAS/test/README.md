@@ -80,3 +80,11 @@ concurrently with separate RNGs and compared with serial execution.
 covariance-adjusted design diagonal against the independent dense precision.
 Timing benchmarks are separate from correctness tests; see
 [`../benchmark/README.md`](../benchmark/README.md).
+
+Rate storage uses `logrates`, with `logtot` holding the log of the unscaled
+intensity sum. `rsums` contains cumulative `exp(logrates - maximum(logrates))`;
+its endpoint is the scaled total, not necessarily one. Extreme-rate tests use
+independent BigFloat probability definitions and check selection, detailed
+balance, importance correction, zero regularization and auxiliary intensity,
+auxiliary-only states, and independent concurrent kernels. Run focused uneven
+partitions with `julia --project=. --threads=3 test/rate_tests.jl`.

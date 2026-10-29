@@ -158,8 +158,8 @@ function next_step!(samp::ProbitBVSSampler)
         if !samp.isadapted && samp.adapt_xi
             xi_targ = samp.xi_targ
             xi = samp.wTGSState.xi
-            rs = samp.wTGSState.rsums[end]
-            samp.wTGSState.xi = xi + (xi_targ - xi / rs) / (sqrt(samp.T))
+            logtot = samp.wTGSState.logtot
+            samp.wTGSState.xi = xi + (xi_targ - exp(log(xi) - logtot)) / (sqrt(samp.T))
         end
     else
         gibbs_CG!(samp)
@@ -422,9 +422,8 @@ function get_state(samp::ProbitBVSSampler)
 
     γ = samp.wTGSState.γ
     pips = samp.wTGSState.pips
-    rates = samp.wTGSState.rates
     # Reciprocal total move rate is the weighted-TGS importance weight.
-    Z = 1.0 / sum(rates)
+    Z = exp(-samp.wTGSState.logtot)
 
     Y = copy(ps.Y)
     r = ps.r
