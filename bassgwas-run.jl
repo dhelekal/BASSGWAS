@@ -25,6 +25,18 @@ using ArgParse
 using Optim
 using Distributions
 
+# --inclnext is a headerless text file with one literal isolate identifier per line.
+function read_fixed_indices(path, sample_ids)
+    names = string.(sample_ids)
+    indices = Int[]
+    for name in readlines(path)
+        index = findfirst(==(name), names)
+        isnothing(index) && throw(ArgumentError("Unknown fixed isolate: $(repr(name))"))
+        push!(indices, index)
+    end
+    return indices
+end
+
 # Define input files, sampling controls, model-size prior targets, and design options.
 function parse_commandline()
     s = ArgParseSettings()
@@ -200,8 +212,7 @@ idx_obs = findall(in.(data[:, 1], Ref(obs[:, 1])))
 # Map any strains required in the next batch to their full-dataset row indices.
 idx_fixed = similar(idx_obs, 0)
 if incl_next
-    obsfixed = DataFrame(CSV.File(parsed["inclnext"]))
-    idx_fixed = [findfirst(j .== data[:, 1]) for j in obsfixed[:, 1]]
+    idx_fixed = read_fixed_indices(parsed["inclnext"], data[:, 1])
 end
 
 # Restrict the population covariance to observed strains and recompute its basis.

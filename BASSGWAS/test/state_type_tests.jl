@@ -111,7 +111,7 @@ end
         @test state.eps === 0.0 && state.xi === 1.0
         @test all(
             name -> getfield(state, name) isa Vector{Float64},
-            (:dets, :ssq, :llrs, :pips, :conds, :rates, :rsums)
+            (:dets, :ssq, :llrs, :pips, :conds, :logrates, :rsums)
         )
         @test qc isa BASSGWAS.QCache{Float64}
         @test isapprox(
@@ -140,7 +140,7 @@ end
     # No selectable predictors: only the auxiliary move remains.
     ps0 = numerical_fixture(0)
     state0, _ = BASSGWAS.init_state2(ll, ps0, BASSGWAS.makeSCache(ps0), Int[])
-    @test state0.rates == [1.0] && state0.rsums == [1.0]
+    @test exp.(state0.logrates) == [1.0] && state0.rsums == [1.0]
 end
 
 @testset "Float64 sampler transitions and adaptation" begin
@@ -168,4 +168,106 @@ end
         posterior = BASSGWAS.get_state(sampler)
         @test posterior.beta isa Vector{Float64}
     end
+end
+
+@testset "Proposal adaptation with independently controlled xi" begin
+    ps = numerical_fixture(3; s = 1.0)
+    snapshot(adaptor) = map(name -> deepcopy(getfield(adaptor, name)), fieldnames(typeof(adaptor)))
+    for nadapt in (-1, 1.5)
+        @test_throws ArgumentError ProbitBVSSampler(
+            ps.Xaug[:, 1:ps.p], Int.(ps.Y .> 0), ps.U, ps.S, 1, 2; nadapt
+        )
+    end
+    for sample_c in (false, true), adapt_xi in (false, true)
+        sampler = ProbitBVSSampler(
+            ps.Xaug[:, 1:ps.p], Int.(ps.Y .> 0), ps.U, ps.S, 1, 2;
+            sample_c, adapt_xi, nadapt = 24, xi_init = 1.0, rng = Xoshiro(304)
+        )
+        initial_adaptor = snapshot(sampler.adaptor)
+        @test !is_adapted(sampler)
+        for _ in 1:23
+            next_step!(sampler)
+            @test !is_adapted(sampler)
+            if !adapt_xi
+                @test sampler.wTGSState.xi == 1.0
+                @test sampler.wTGSState.logrates[end] == 0.0
+            end
+        end
+        @test snapshot(sampler.adaptor) != initial_adaptor
+        @test sampler.adaptor.stage == 3
+        @test all(isfinite, sampler.adaptor.scales)
+        @test isfinite(sampler.adaptor.dt) && sampler.adaptor.dt > 0
+        @test adapt_xi ? sampler.wTGSState.xi != 1.0 : sampler.wTGSState.xi == 1.0
+
+        # Production chains discard exactly nadapt transitions before retaining draws.
+        next_step!(sampler)
+        @test sampler.T == 24
+        @test is_adapted(sampler)
+        frozen_adaptor = snapshot(sampler.adaptor)
+        frozen_xi = sampler.wTGSState.xi
+        for _ in 1:100
+            next_step!(sampler)
+        end
+        @test snapshot(sampler.adaptor) == frozen_adaptor
+        @test sampler.wTGSState.xi == frozen_xi
+    end
+
+    # Explicitly requesting no warm-up disables both kinds of adaptation.
+    for adapt_xi in (false, true)
+        sampler = ProbitBVSSampler(
+            ps.Xaug[:, 1:ps.p], Int.(ps.Y .> 0), ps.U, ps.S, 1, 2;
+            adapt_xi, nadapt = 0, rng = Xoshiro(304)
+        )
+        initial_adaptor = snapshot(sampler.adaptor)
+        initial_xi = sampler.wTGSState.xi
+        @test is_adapted(sampler)
+        for _ in 1:24
+            next_step!(sampler)
+        end
+        @test snapshot(sampler.adaptor) == initial_adaptor
+        @test sampler.wTGSState.xi == initial_xi
+    end
+end
+
+@testset "Auxiliary adaptation preserves positive finite intensities" begin
+    X = zeros(4, 1)
+    Y = [0, 1, 0, 1]
+    U, S = zeros(4, 0), Float64[]
+    for target in (-0.1, 1.1, NaN, Inf, -Inf)
+        @test_throws ArgumentError ProbitBVSSampler(X, Y, U, S, 1.0, 2.0; xi_targ = target)
+    end
+    for p in (0, 1), eps in (0.0, 0.1), xi_init in (0.05, 1e-12), target in (0.0, 0.25, 1.0)
+        sampler = ProbitBVSSampler(X[:, 1:p], Y, U, S, 1.0, 1000.0;
+            eps, xi_init, xi_targ = target, nadapt = 40, rng = Xoshiro(1))
+        for _ in 1:40
+            next_step!(sampler)
+            @test isfinite(sampler.wTGSState.xi) && sampler.wTGSState.xi > 0
+            @test isfinite(sampler.wTGSState.logtot)
+        end
+        @test is_adapted(sampler)
+        frozen = sampler.wTGSState.xi
+        for _ in 1:12
+            next_step!(sampler)
+            @test sampler.wTGSState.xi == frozen
+            @test isfinite(sampler.wTGSState.logtot)
+        end
+    end
+    # A zero initial auxiliary intensity remains supported when predictors exist.
+    sampler = ProbitBVSSampler(X, Y, U, S, 1.0, 2.0;
+        xi_init = 0.0, nadapt = 24, rng = Xoshiro(2))
+    for _ in 1:24
+        next_step!(sampler)
+    end
+    @test sampler.wTGSState.xi > 0 && isfinite(sampler.wTGSState.xi)
+
+    # Updates that already stay positive retain the original additive formula.
+    sampler = ProbitBVSSampler(X[:, 1:0], Y, U, S, 1.0, 2.0;
+        xi_init = 5.0, nadapt = 24, rng = Xoshiro(3))
+    for _ in 1:11
+        next_step!(sampler)
+    end
+    oldxi = sampler.wTGSState.xi
+    next_step!(sampler)
+    expected = oldxi + (sampler.xi_targ - 1.0) / sqrt(11)
+    @test sampler.wTGSState.xi ≈ expected
 end

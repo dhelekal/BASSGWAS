@@ -60,6 +60,8 @@ to the eigenbasis of the full target covariance.
 one-based rows of `U` corresponding to the sampled targets. For `m` posterior
 draws, `us` is `m × k_obs` and `rs` is a length-`m` vector of random-effect
 variance draws.
+Eigenvalues must be finite and nonnegative. Zero observed eigenvalues are
+excluded from the covariance pseudoinverse; no cutoff is applied to positive modes.
 
 Return an `m × k_full` matrix of full-basis random-effect coefficients. The
 method samples from the conditional Gaussian distribution, advances `rng`,
@@ -77,7 +79,11 @@ function expand_randeff(
     k = size(S, 1)
 
     # Form the covariance pseudoinverse for the conditional Gaussian draw.
-    pinv = Um * Diagonal(inv.(Sm)) * Um'
+    all(s -> isfinite(s) && s >= 0, Sm) ||
+        throw(ArgumentError("observed covariance eigenvalues must be finite and nonnegative"))
+    all(s -> isfinite(s) && s >= 0, S) ||
+        throw(ArgumentError("full covariance eigenvalues must be finite and nonnegative"))
+    pinv = Um * Diagonal(map(s -> iszero(s) ? zero(s) : inv(s), Sm)) * Um'
     Vm = Um * Diagonal(sqrt.(Sm))
     # Convert sampled basis coefficients into observed random effects.
     re_obs = Vm * us'

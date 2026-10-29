@@ -19,6 +19,18 @@ using UnPack
 using ArgParse
 using BASSGWAS
 
+# --inclnext is a headerless text file with one literal isolate identifier per line.
+function read_fixed_indices(path, sample_ids)
+    names = string.(sample_ids)
+    indices = Int[]
+    for name in readlines(path)
+        index = findfirst(==(name), names)
+        isnothing(index) && throw(ArgumentError("Unknown fixed isolate: $(repr(name))"))
+        push!(indices, index)
+    end
+    return indices
+end
+
 function parse_commandline()
     s = ArgParseSettings()
 
@@ -148,8 +160,7 @@ idx_obs = findall(in.(data[:, 1], Ref(obs[:, 1])))
 
 idx_fixed = similar(idx_obs, 0)
 if incl_next
-    obsfixed = DataFrame(CSV.File(parsed["inclnext"]))
-    idx_fixed = [findfirst(j .== data[:, 1]) for j in obsfixed[:, 1]]
+    idx_fixed = read_fixed_indices(parsed["inclnext"], data[:, 1])
 end
 
 cpars_draws = read_chains(parfile)

@@ -250,7 +250,7 @@ function prepare_active!(qc, sc, c, mc)
         @inbounds for j in 1:d
             h = zero_t
 
-            @simd for i in 1:d
+            @turbo for i in 1:d
                 h += abs2(invlower[i, j])
             end
 
@@ -288,7 +288,7 @@ function _candidate_block!(data, lo, hi, worker)
     @inbounds for j in axes(block, 2)
         normb, uy = zero_t, zero_t
 
-        @simd for i in 1:d
+        @turbo for i in 1:d
             x = block[i, j]
             normb += x * x
             uy += x * work.u[i]
@@ -346,7 +346,7 @@ function prepare_proposal!(qc, sc, r, s, c, mc)
     weighted_design = view(proposal.weighted_design, :, 1:d)
 
     @inbounds for j in 1:d
-        @simd for i in 1:sc.ns
+        @turbo for i in 1:sc.ns
             weighted_design[i, j] = proposal.d[i] * proposal.utx[i, j]
         end
     end
@@ -382,7 +382,7 @@ function proposal_terms!(qc, sc, r, c, mc; s = sc.covariance.s)
     proposal = prepare_proposal!(qc, sc, r, s, c, mc)
     d, response = qc.d, sc.response
 
-    @inbounds @simd for i in 1:sc.ns
+    @inbounds @turbo for i in 1:sc.ns
         proposal.weighted_y[i] = proposal.d2[i] * response.yu[i]
     end
 
@@ -458,7 +458,7 @@ function response_ssq!(qc, sc, Y)
     if sc.ns > 0
         mul!(proposal.yu, transpose(sc.U), Y)
         mul!(proposal.residual, sc.U, proposal.yu, -one_t, one_t)
-        @inbounds @simd for i in 1:sc.ns
+        @inbounds @turbo for i in 1:sc.ns
             proposal.weighted_y[i] = proposal.d2[i] * proposal.yu[i]
         end
         mul!(fx, transpose(view(proposal.utx, :, 1:d)), proposal.weighted_y, -one_t, inv(proposal.s))

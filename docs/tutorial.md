@@ -395,30 +395,30 @@ should only take a few minutes.
     mkdir gwas_outputs
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile gwas_inputs/data200.csv --odir gwas_outputs --batchsz 0 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.13.2+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
+    ## The latest version of Julia in the `release` channel is 1.13.3+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
     ## 
     ##   juliaup update
     ## 
-    ## in your terminal shell to install Julia 1.13.2+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+    ## in your terminal shell to install Julia 1.13.3+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.5474546959099715
+    ## Found xi=3.365718266426455
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64       Missing
+    ##   parameters      mean       std      mcse   ess_bulk    ess_tail      rhat   ess_per_sec
+    ##       Symbol   Float64   Float64   Float64    Float64     Float64   Float64       Missing
     ## 
-    ##            n    6.8120    4.5709    0.2399   386.1948   455.3415    1.0103       missing
-    ##        sigma    1.0800    1.2193    0.0376   974.3384   736.7259    1.0000       missing
-    ##            r    0.8860    1.5298    0.0578   735.7150   680.3518    1.0025       missing
-    ##            c   11.9975   13.3147    0.4610   621.6985   802.9035    1.0031       missing
-    ##        icept   -5.1359    2.4287    0.1577   247.6430   665.9075    1.0253       missing
-    ##            Z    0.0701    0.0352    0.0012   802.5125   856.3953    1.0048       missing
+    ##            n    7.0730    4.3782    0.2170   433.8511    635.7030    1.0011       missing
+    ##        sigma    1.0877    1.4694    0.0458   924.3000   1023.3969    1.0022       missing
+    ##            r    0.9188    1.5568    0.0701   740.3940    683.9265    1.0009       missing
+    ##            c   12.3853   15.3099    0.7304   426.1704    580.2577    1.0028       missing
+    ##        icept   -5.2305    2.5092    0.1356   332.9888    454.0099    1.0004       missing
+    ##            Z    0.0700    0.0351    0.0013   731.7656    755.0176    0.9999       missing
     ## 
     ## Saving draws ...
     ## Done
@@ -426,7 +426,7 @@ should only take a few minutes.
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.17646934986114 minutes."
+    ## [1] "Run time: 2.33049561580022 minutes."
 
 When using BASS-GWAS with real data, using up to 4 threads per chain is
 recommended. We recommend running chains for 500 × 1000 iterations and
@@ -616,13 +616,13 @@ the annotated de novo assembly from its own parent isolate.
         print(n = 5, max_extra_cols = 0, width=60)
 
     ## # A tibble: 3,600 × 2
-    ##   group     PIP
-    ##   <chr>   <dbl>
-    ## 1 gyrA   0.784 
-    ## 2 parC   0.428 
-    ## 3 piiC_2 0.0847
-    ## 4 piiC_3 0.0812
-    ## 5 tbpB_2 0.0778
+    ##   group         PIP
+    ##   <chr>       <dbl>
+    ## 1 gyrA       0.849 
+    ## 2 parC       0.398 
+    ## 3 tbpB_2     0.118 
+    ## 4 piiC_3     0.0998
+    ## 5 WHO_N.2312 0.0954
     ## # ℹ 3,595 more rows
 
 Based on these two summaries we can see that there are two peaks at the
@@ -666,16 +666,16 @@ mapping to *gyrA* and display the top 5.
     ## # A tibble: 217 × 8
     ##    variant     contig locus   down     up pattern_id     PIP
     ##    <chr>       <chr>  <chr>  <dbl>  <dbl>      <dbl>   <dbl>
-    ##  1 TCATCGGTAA… WHO_N  gyrA  996715 996748       5753 0.326  
-    ##  2 TCATCGGTAA… WHO_N  gyrA  996715 996756       2055 0.305  
-    ##  3 CGGTAAATAC… WHO_N  gyrA  996719 996756       8603 0.0669 
-    ##  4 TACGACACCA… WHO_G  gyrA  995790 995822       4659 0.0295 
-    ##  5 ACCACCCCCA… WHO_N  gyrA  996727 996782       9393 0.0230 
-    ##  6 GACACCATCG… WHO_N  gyrA  996756 996787       1507 0.0141 
-    ##  7 ACCACCCCCA… WHO_N  gyrA  996727 996775       2687 0.0141 
-    ##  8 CGCAGTTTAC… WHO_N  gyrA  996746 996787       7414 0.00291
-    ##  9 AAGGGTTACG… gnl|X… gyrA     136    168       7275 0.00284
-    ## 10 GCTTGGGCGG… WHO_N  gyrA  997171 997231       8636 0.00222
+    ##  1 TCATCGGTAA… WHO_N  gyrA  996715 996756       2055 0.355  
+    ##  2 TCATCGGTAA… WHO_N  gyrA  996715 996748       5753 0.349  
+    ##  3 CGGTAAATAC… WHO_N  gyrA  996719 996756       8603 0.0935 
+    ##  4 ACCACCCCCA… WHO_N  gyrA  996727 996775       2687 0.0125 
+    ##  5 GACACCATCG… WHO_N  gyrA  996756 996787       1507 0.00998
+    ##  6 ACCACCCCCA… WHO_N  gyrA  996727 996782       9393 0.00951
+    ##  7 TACGACACCA… WHO_G  gyrA  995790 995822       4659 0.00766
+    ##  8 AAGGGTTACG… gnl|X… gyrA     136    168       7275 0.00393
+    ##  9 GCGGCGTGCG… WHO_N  gyrA  997177 997216       9785 0.00303
+    ## 10 AGACATTGAG… WHO_N  gyrA  996905 996965       5802 0.00215
     ## # ℹ 207 more rows
 
 # Adaptive experimental design
@@ -711,40 +711,40 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round0/data.csv --odir round0 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.13.2+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
+    ## The latest version of Julia in the `release` channel is 1.13.3+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
     ## 
     ##   juliaup update
     ## 
-    ## in your terminal shell to install Julia 1.13.2+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+    ## in your terminal shell to install Julia 1.13.3+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=2.854208944316964
+    ## Found xi=3.528858506106784
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64       Missing
+    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ess_per_sec
+    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64       Missing
     ## 
-    ##            n    7.5980    6.6832    0.2758    701.8529   689.1893    1.0008       missing
-    ##        sigma    1.4246   11.8817    0.3813   1012.9606   916.9188    0.9999       missing
-    ##            r    2.6950    6.3460    0.2016   1095.2376   985.3725    1.0027       missing
-    ##            c    9.6662   13.6617    0.4135   1016.7319   978.1122    0.9996       missing
-    ##        icept   -1.9056    2.8864    0.0942    906.7984   997.6708    1.0011       missing
-    ##            Z    0.0760    0.0346    0.0012    761.3074   691.4465    1.0016       missing
+    ##            n    7.7130    7.3737    0.3371    552.0065    581.3961    1.0033       missing
+    ##        sigma    0.9561    1.0049    0.0315   1044.3774    942.8433    0.9987       missing
+    ##            r    2.7840    5.6343    0.1764    935.9887   1001.0774    0.9993       missing
+    ##            c    8.7843   12.6676    0.3915    917.4107    766.9825    1.0007       missing
+    ##        icept   -1.9870    2.4134    0.0771    964.9740    886.8298    1.0015       missing
+    ##            Z    0.0726    0.0321    0.0012    573.4171    565.4394    1.0026       missing
     ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 4.34812195689837
+    ## Design objective value: 4.288152479126986
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.18757361570994 minutes."
+    ## [1] "Run time: 2.37941193183263 minutes."
 
 ### Round 1
 
@@ -759,40 +759,40 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round1/data.csv --odir round1 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.13.2+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
+    ## The latest version of Julia in the `release` channel is 1.13.3+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
     ## 
     ##   juliaup update
     ## 
-    ## in your terminal shell to install Julia 1.13.2+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+    ## in your terminal shell to install Julia 1.13.3+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=4.40249913037854
+    ## Found xi=3.1273705488147843
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk   ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64    Float64   Float64       Missing
+    ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   ess_per_sec
+    ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64       Missing
     ## 
-    ##            n    7.2440    6.4248    0.2702    599.3479   777.5930    1.0026       missing
-    ##        sigma    1.2064    1.9002    0.0570   1090.8130   829.3528    0.9991       missing
-    ##            r    1.5445    2.8284    0.0955    866.6980   877.3446    1.0030       missing
-    ##            c    9.2009   11.3713    0.3481   1106.7804   964.9872    0.9986       missing
-    ##        icept   -2.9342    2.2011    0.0735    822.0807   912.6107    1.0005       missing
-    ##            Z    0.0681    0.0289    0.0011    635.7887   710.0038    1.0005       missing
+    ##            n    8.7660    7.4898    0.3567   536.3433   399.6971    0.9997       missing
+    ##        sigma    1.0695    1.3914    0.0463   932.7301   986.4167    1.0000       missing
+    ##            r    1.9253    3.5847    0.1138   890.9515   856.1954    1.0011       missing
+    ##            c    8.5197   11.0111    0.3573   932.4187   924.7045    0.9998       missing
+    ##        icept   -2.5033    1.9193    0.0628   960.8012   855.9091    0.9991       missing
+    ##            Z    0.0711    0.0363    0.0013   624.8124   489.5210    0.9985       missing
     ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.5892368535837766
+    ## Design objective value: 3.758603758698465
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.31884651581446 minutes."
+    ## [1] "Run time: 2.50042836666107 minutes."
 
 Compute position PIPs
 
@@ -823,40 +823,40 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round2/data.csv --odir round2 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.13.2+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
+    ## The latest version of Julia in the `release` channel is 1.13.3+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
     ## 
     ##   juliaup update
     ## 
-    ## in your terminal shell to install Julia 1.13.2+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+    ## in your terminal shell to install Julia 1.13.3+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.16417112489757
+    ## Found xi=3.7956164770831458
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64       Missing
+    ##   parameters      mean       std      mcse   ess_bulk   ess_tail      rhat   ess_per_sec
+    ##       Symbol   Float64   Float64   Float64    Float64    Float64   Float64       Missing
     ## 
-    ##            n    7.6790    6.3434    0.3091    603.5699    433.4688    1.0044       missing
-    ##        sigma    1.2482    2.6716    0.0822    884.3329    765.6434    0.9985       missing
-    ##            r    0.8308    1.6066    0.0498   1057.2448   1030.1006    0.9992       missing
-    ##            c   11.2987   13.2012    0.4292    893.2933    936.9296    1.0011       missing
-    ##        icept   -3.8464    2.3625    0.0860    819.5100    854.2453    0.9983       missing
-    ##            Z    0.0712    0.0330    0.0011    931.7134    941.7202    0.9991       missing
+    ##            n    8.3580    5.5757    0.2740   486.5833   634.0064    0.9994       missing
+    ##        sigma    1.2131    2.6389    0.0836   974.7692   947.8873    0.9995       missing
+    ##            r    1.3353    3.3865    0.1070   780.9813   925.5921    1.0048       missing
+    ##            c   14.7808   19.5974    0.6287   832.8966   874.9447    1.0018       missing
+    ##        icept   -4.6158    2.8379    0.1011   752.9854   944.3141    1.0005       missing
+    ##            Z    0.0644    0.0279    0.0010   763.7411   955.1015    1.0010       missing
     ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 3.6216314793974407
+    ## Design objective value: 3.900656091862378
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.22837971448898 minutes."
+    ## [1] "Run time: 2.53009968201319 minutes."
 
 Compute position PIPs
 
@@ -887,40 +887,40 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round3/data.csv --odir round3 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.13.2+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
+    ## The latest version of Julia in the `release` channel is 1.13.3+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
     ## 
     ##   juliaup update
     ## 
-    ## in your terminal shell to install Julia 1.13.2+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+    ## in your terminal shell to install Julia 1.13.3+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=3.4705535971595785
+    ## Found xi=4.695797913586301
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64       Missing
+    ##   parameters      mean       std      mcse   ess_bulk    ess_tail      rhat   ess_per_sec
+    ##       Symbol   Float64   Float64   Float64    Float64     Float64   Float64       Missing
     ## 
-    ##            n    7.3770    5.2165    0.2147    502.4948    590.1907    0.9988       missing
-    ##        sigma    1.2022    1.9340    0.0599   1008.9718    948.0836    0.9985       missing
-    ##            r    0.5887    1.1869    0.0379    899.4648   1016.2606    0.9997       missing
-    ##            c   10.3113   11.4376    0.3787    880.1297    923.4503    0.9993       missing
-    ##        icept   -4.6718    2.6202    0.1121    538.4919    868.9468    1.0008       missing
-    ##            Z    0.0687    0.0314    0.0011    783.3491    909.5722    0.9998       missing
+    ##            n    8.9870    6.0122    0.2807   463.5957    684.4223    1.0052       missing
+    ##        sigma    1.2906    2.2560    0.0711   970.3158    819.5961    1.0007       missing
+    ##            r    0.7502    1.3041    0.0410   931.6309   1029.7381    1.0004       missing
+    ##            c   11.2324   12.1161    0.4276   831.7229    906.9344    1.0021       missing
+    ##        icept   -5.0313    3.0775    0.1491   412.5317    786.9359    1.0026       missing
+    ##            Z    0.0586    0.0263    0.0010   619.8525    819.4385    1.0015       missing
     ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 2.712171002758449
+    ## Design objective value: 3.3257212514051018
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.37345720132192 minutes."
+    ## [1] "Run time: 2.63621484835943 minutes."
 
 Compute position PIPs
 
@@ -951,40 +951,40 @@ Run BASS-GWAS
 
     julia -t2 ../bassgwas-run.jl --pfile gwas_inputs/patterns_centred.csv --ufile gwas_inputs/U.csv --sfile gwas_inputs/S.csv --obsfile round4/data.csv --odir round4 --batchsz 16 --ndraws 500 --nthin 250 --nchains 2
 
-    ## The latest version of Julia in the `release` channel is 1.13.2+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
+    ## The latest version of Julia in the `release` channel is 1.13.3+0.aarch64.apple.darwin14. You currently have `1.13.0+0.aarch64.apple.darwin14` installed. Run:
     ## 
     ##   juliaup update
     ## 
-    ## in your terminal shell to install Julia 1.13.2+0.aarch64.apple.darwin14 and update the `release` channel to that version.
+    ## in your terminal shell to install Julia 1.13.3+0.aarch64.apple.darwin14 and update the `release` channel to that version.
     ## Adding worker processes ...
     ## Done
     ## Adapting xi ...
-    ## Found xi=4.512610019541573
+    ## Found xi=4.360467811082289
     ## Running parallel chains ...
     ## Done
     ## Processing draws ...
     ## Tempered distribution diagnostics:
     ## Summary Statistics
     ## 
-    ##   parameters      mean       std      mcse    ess_bulk    ess_tail      rhat   ess_per_sec
-    ##       Symbol   Float64   Float64   Float64     Float64     Float64   Float64       Missing
+    ##   parameters      mean       std      mcse   ess_bulk    ess_tail      rhat   ess_per_sec
+    ##       Symbol   Float64   Float64   Float64    Float64     Float64   Float64       Missing
     ## 
-    ##            n    8.9160    5.0777    0.2221    551.5677    564.0845    1.0011       missing
-    ##        sigma    1.3896    3.0045    0.1110   1082.8184    929.8503    1.0009       missing
-    ##            r    0.6942    1.5269    0.0507    981.0559   1037.7857    1.0000       missing
-    ##            c   13.8678   13.2470    0.4230    914.3102   1076.2587    0.9985       missing
-    ##        icept   -7.5880    3.3401    0.1228    743.1112    900.7765    0.9987       missing
-    ##            Z    0.0576    0.0265    0.0010    662.9775    915.1700    0.9994       missing
+    ##            n    8.6400    4.7683    0.2008   587.9816    651.4823    1.0002       missing
+    ##        sigma    1.3757    2.6847    0.0848   912.3282   1009.3235    1.0002       missing
+    ##            r    0.6929    1.7799    0.0574   945.4394    946.8101    1.0002       missing
+    ##            c   14.2340   15.8887    0.5267   910.9898    947.1035    0.9991       missing
+    ##        icept   -7.2719    3.1599    0.0994   951.2114   1084.4687    1.0016       missing
+    ##            Z    0.0586    0.0272    0.0009   859.6082    795.0009    0.9994       missing
     ## 
     ## Saving draws ...
     ## Done
     ## Designing next experiment ...
-    ## Design objective value: 1.789077475875672
+    ## Design objective value: 1.6376606108462095
     ## Writing design ...
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.56128575007121 minutes."
+    ## [1] "Run time: 2.5559817314148 minutes."
 
 Compute position PIPs
 
@@ -1027,11 +1027,11 @@ Inspect *parC* variants
     ## # A tibble: 137 × 8
     ##   variant      contig locus   down     up pattern_id     PIP
     ##   <chr>        <chr>  <chr>  <dbl>  <dbl>      <dbl>   <dbl>
-    ## 1 ACCATCCGCAC… WHO_N  parC  196786 196830       5780 0.986  
-    ## 2 TTTTGGGTAAA… WHO_N  parC  196801 196842       3554 0.00676
-    ## 3 GGCGGCGATGC… WHO_N  parC  196659 196709       1425 0.00212
-    ## 4 GCCGTGCCTGA… WHO_N  parC  197135 197165       2133 0.00167
-    ## 5 GGTGATGACCG… WHO_N  parC  195082 195134       1281 0.00156
+    ## 1 ACCATCCGCAC… WHO_N  parC  196786 196830       5780 0.994  
+    ## 2 TTTTGGGTAAA… WHO_N  parC  196801 196842       3554 0.00398
+    ## 3 GAGATTTTGGG… WHO_N  parC  196814 196846       5553 0.00206
+    ## 4 CCATGCGCACC… WHO_N  parC  196783 196843       2103 0.00195
+    ## 5 GATGGCGGTGT… WHO_N  parC  195737 195776       1419 0.00180
     ## # ℹ 132 more rows
 
 The variants mapping to *parC* are dominated by a single unitig mapping
@@ -1051,11 +1051,11 @@ Inspect *gyrA* variants
     ## # A tibble: 217 × 8
     ##   variant      contig locus   down     up pattern_id     PIP
     ##   <chr>        <chr>  <chr>  <dbl>  <dbl>      <dbl>   <dbl>
-    ## 1 TCATCGGTAAA… WHO_N  gyrA  996715 996756       2055 0.656  
-    ## 2 TCATCGGTAAA… WHO_N  gyrA  996715 996748       5753 0.162  
-    ## 3 CGGTAAATACC… WHO_N  gyrA  996719 996756       8603 0.155  
-    ## 4 ACCACCCCCAC… WHO_N  gyrA  996727 996782       9393 0.0127 
-    ## 5 GACACCATCGT… WHO_N  gyrA  996756 996787       1507 0.00920
+    ## 1 TCATCGGTAAA… WHO_N  gyrA  996715 996756       2055 0.718  
+    ## 2 TCATCGGTAAA… WHO_N  gyrA  996715 996748       5753 0.127  
+    ## 3 CGGTAAATACC… WHO_N  gyrA  996719 996756       8603 0.125  
+    ## 4 GACACCATCGT… WHO_N  gyrA  996756 996787       1507 0.00511
+    ## 5 TACGACACCAT… WHO_G  gyrA  995790 995822       4659 0.00463
     ## # ℹ 212 more rows
 
 The variants mapping to *gyrA* are dominated by a handful of strongly

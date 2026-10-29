@@ -64,7 +64,7 @@ end
                                 ll, ps, fresh_sc,
                                 exact.gammas[mask + 1]; eps = state.eps, xi_init = state.xi
                             )
-                            for field in (:dets, :ssq, :llrs, :conds, :pips, :rates, :rsums, :ll_curr)
+                            for field in (:dets, :ssq, :llrs, :conds, :pips, :logrates, :rsums, :logtot, :ll_curr)
                                 @test isapprox(
                                     getproperty(state, field), getproperty(fresh, field);
                                     rtol = NUM_RTOL, atol = NUM_ATOL

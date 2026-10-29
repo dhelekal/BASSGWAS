@@ -31,8 +31,10 @@ Numerical arrays and scalars share the concrete floating-point type `T`;
 - `llrs`: Posterior log ratio of each toggled model to the current model.
 - `pips`: Conditional predictor-inclusion probabilities.
 - `conds`: Conditional probability of each predictor's current state.
-- `rates`, `rsums`: Move intensities and their cumulative sums; the final
-  entry represents the auxiliary continuous-state update.
+- `logrates`: Log move intensities, with the auxiliary event last.
+- `rsums`: Cumulative intensities after subtracting the maximum log rate;
+  the final entry is the scaled total, not necessarily one.
+- `logtot`: Logarithm of the unscaled total intensity.
 - `ll_curr`: Collapsed log likelihood of the current model.
 - `xi`: Auxiliary-update intensity.
 - `eps`: Weighted-TGS regularization weight.
@@ -45,40 +47,41 @@ mutable struct wTGSState2{T <: AbstractFloat}
     llrs::Vector{T}
     pips::Vector{T}
     conds::Vector{T}
-    rates::Vector{T}
+    logrates::Vector{T}
     rsums::Vector{T}
     ll_curr::T
     xi::T
     eps::T
+    logtot::T
 
     function wTGSState2{T}(
             p::Integer, γ::AbstractVector{<:Integer},
-            dets, ssq, llrs, pips, conds, rates, rsums,
-            ll_curr, xi, eps
+            dets, ssq, llrs, pips, conds, logrates, rsums,
+            ll_curr, xi, eps, logtot = maximum(logrates) + log(rsums[end])
         ) where {T <: AbstractFloat}
         isconcretetype(T) || throw(ArgumentError("state element type must be concrete"))
         p >= 0 && length(γ) == p &&
             all(x -> x isa AbstractVector && length(x) == p, (dets, ssq, llrs, pips, conds)) &&
-            rates isa AbstractVector && rsums isa AbstractVector &&
-            length(rates) == p + 1 && length(rsums) == p + 1 ||
+            logrates isa AbstractVector && rsums isa AbstractVector &&
+            length(logrates) == p + 1 && length(rsums) == p + 1 ||
             throw(DimensionMismatch("state arrays must match predictor and move counts"))
         all(x -> x == 0 || x == 1, γ) || throw(ArgumentError("inclusion values must be zero or one"))
         xi, eps = T(xi), T(eps)
         isfinite(xi) && xi >= 0 || throw(ArgumentError("xi must be finite and nonnegative"))
         isfinite(eps) && eps >= 0 || throw(ArgumentError("eps must be finite and nonnegative"))
-        return new{T}(p, γ, dets, ssq, llrs, pips, conds, rates, rsums, ll_curr, xi, eps)
+        return new{T}(p, γ, dets, ssq, llrs, pips, conds, logrates, rsums, ll_curr, xi, eps, logtot)
     end
 end
 
 function wTGSState2(
         p::Integer, γ::AbstractVector{<:Integer}, dets, ssq, llrs,
-        pips, conds, rates, rsums, ll_curr, xi, eps
+        pips, conds, logrates, rsums, ll_curr, xi, eps, logtot = maximum(logrates) + log(rsums[end])
     )
     T = _state_float_type(
-        map(eltype, (dets, ssq, llrs, pips, conds, rates, rsums))...,
+        map(eltype, (dets, ssq, llrs, pips, conds, logrates, rsums))...,
         typeof(ll_curr), typeof(xi), typeof(eps)
     )
-    return wTGSState2{T}(p, γ, dets, ssq, llrs, pips, conds, rates, rsums, ll_curr, xi, eps)
+    return wTGSState2{T}(p, γ, dets, ssq, llrs, pips, conds, logrates, rsums, ll_curr, xi, eps, logtot)
 end
 
 """
@@ -141,7 +144,7 @@ function init_state2(
     pips = zeros(T, p)
     conds = zeros(T, p)
     llrs = zeros(T, p)
-    rates = zeros(T, p + 1)
+    logrates = zeros(T, p + 1)
     rsums = zeros(T, p + 1)
 
     paug = scache.paug
@@ -152,13 +155,18 @@ function init_state2(
     ll_curr = loglik(det_curr, ssq_curr)
 
     comp_llrs!(llrs, dets, ssq, ll_curr, idx1, idx0, p, loglik, alpha, beta)
-    comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
+    comp_rates2!(view(logrates, 1:p), conds, pips, llrs, idx1, idx0, eps)
 
-    # The final rate is reserved for an auxiliary, non-predictor update.
-    rates[p + 1] = xi_init
-    cumsum!(rsums, rates)
+    logrates[p + 1] = log(xi_init)
+    m = maximum(logrates)
+    isfinite(m) || throw(DomainError(m, "total intensity must be positive with finite log rates"))
+    @turbo for i in eachindex(logrates)
+        rsums[i] = exp(logrates[i] - m)
+    end
+    cumsum!(rsums, rsums)
+    logtot = m + log(rsums[end])
 
-    state = wTGSState2{T}(p, γ, dets, ssq, llrs, pips, conds, rates, rsums, ll_curr, xi_init, eps)
+    state = wTGSState2{T}(p, γ, dets, ssq, llrs, pips, conds, logrates, rsums, ll_curr, xi_init, eps, logtot)
     return state, qcache
 end
 
@@ -175,7 +183,7 @@ function update_state2!(
         qcache::QCache{T}, loglik::Aloglik{T}
     ) where {D, T}
 
-    @unpack p, γ, dets, ssq, llrs, pips, conds, rates, rsums, xi, eps = state
+    @unpack p, γ, dets, ssq, llrs, pips, conds, logrates, rsums, xi, eps = state
 
     alpha = ps.alpha
     beta = ps.beta
@@ -189,10 +197,17 @@ function update_state2!(
     det_curr, ssq_curr = comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     state.ll_curr = loglik(det_curr, ssq_curr)
     comp_llrs!(llrs, dets, ssq, state.ll_curr, idx1, idx0, p, loglik, alpha, beta)
-    comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
+    comp_rates2!(view(logrates, 1:p), conds, pips, llrs, idx1, idx0, eps)
 
-    rates[p + 1] = xi
-    return _ = cumsum!(rsums, rates)
+    logrates[p + 1] = log(xi)
+    m = maximum(logrates)
+    isfinite(m) || throw(DomainError(m, "total intensity must be positive with finite log rates"))
+    @turbo for i in eachindex(logrates)
+        rsums[i] = exp(logrates[i] - m)
+    end
+    cumsum!(rsums, rsums)
+    state.logtot = m + log(rsums[end])
+    return rsums
 end
 
 """
@@ -209,7 +224,7 @@ function sample_next2(state, rng)
 
     rtot = rsums[end]
     r = rand(rng) * rtot
-    move_idx = findfirst(x -> x >= r, rsums)
+    move_idx = findfirst(x -> x > r, rsums)
 
     return move_idx
 end
@@ -257,48 +272,62 @@ end
 
 
 function _rates_block!(data, lo, hi, worker)
-    (; rates, conds, pips, llrs, w) = data
-    @turbo for k in lo:hi
-        llr = llrs[k]
-        cprob = logistic(-llr)
-        pip = logistic(llr)
-
-        conds[k] = cprob
-        pips[k] = pip
-        rates[k] = 0.5 * (pip + w) / cprob
+    (; logrates, conds, pips, llrs, w, wp1, logtwo) = data
+    if iszero(w)
+        @turbo for k in lo:hi
+            x = llrs[k]
+            e = exp(-abs(x))
+            d = 1 + e
+            conds[k] = ifelse(x >= 0, e, 1.0) / d
+            pips[k] = ifelse(x >= 0, 1.0, e) / d
+            logrates[k] = x - logtwo
+        end
+    else
+        @turbo for k in lo:hi
+            x = llrs[k]
+            e = exp(-abs(x))
+            d = 1 + e
+            conds[k] = ifelse(x >= 0, e, 1.0) / d
+            pips[k] = ifelse(x >= 0, 1.0, e) / d
+            a = ifelse(x >= 0, wp1 + w * e, w + wp1 * e)
+            logrates[k] = max(x, 0.0) + log(a) - logtwo
+        end
     end
     return 0
 end
 
 """
-    comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
+    comp_rates2!(logrates, conds, pips, llrs, idx1, idx0, eps)
 
 Compute weighted-TGS predictor move intensities from one-toggle log posterior
 ratios.
 
 `conds` receives the conditional probability of each predictor's current
-state, `pips` receives conditional inclusion probabilities, and `rates`
-receives the regularized move intensities. All three arrays are mutated.
+state, `pips` receives conditional inclusion probabilities, and `logrates`
+receives the logarithms of regularized move intensities. All three arrays are mutated.
 """
-function comp_rates2!(rates, conds, pips, llrs, idx1, idx0, eps)
+function comp_rates2!(logrates, conds, pips, llrs, idx1, idx0, eps)
     p = length(conds)
     p == 0 && return nothing
     w = eps / p
+    wp1, logtwo = 1 + w, log(eltype(logrates)(2))
 
     nt = Threads.nthreads()
     foreach_block!(
-        _rates_block!, (; rates, conds, pips, llrs, w), p;
+        _rates_block!, (; logrates, conds, pips, llrs, w, wp1, logtwo), p;
         blocksize = cld(p, nt), workers = nt
     )
 
     for i in idx1
-        llr = llrs[i]
-        cprob = logistic(-llr)
-        pip = cprob
-
-        conds[i] = cprob
-        pips[i] = pip
-        rates[i] = 0.5 * (pip + w) / cprob
+        x = llrs[i]
+        pips[i] = conds[i]
+        if iszero(w)
+            logrates[i] = -logtwo
+        else
+            e = exp(-abs(x))
+            a = x >= 0 ? w + wp1 * e : wp1 + w * e
+            logrates[i] = max(x, zero(x)) + log(a) - logtwo
+        end
     end
 
     return nothing
@@ -372,7 +401,7 @@ function _update_state_test!(
         qcache::QCache{T}, loglik::Aloglik{T}; eps = 5.0
     ) where {D, T}
 
-    @unpack p, γ, dets, ssq, llrs, pips, conds, rates, rsums = state
+    @unpack p, γ, dets, ssq, llrs, pips, conds, logrates, rsums = state
 
     n = ps.n
     alpha = ps.alpha
@@ -400,10 +429,16 @@ function _update_state_test!(
     ssq .= _ssq
 
     comp_llrs!(llrs, dets, ssq, state.ll_curr, idx1, idx0, p, loglik, alpha, beta)
-    comp_rates2!(view(rates, 1:p), conds, pips, llrs, idx1, idx0, eps)
+    comp_rates2!(view(logrates, 1:p), conds, pips, llrs, idx1, idx0, eps)
 
-    rates[p + 1] = state.xi
-    _ = cumsum!(rsums, rates)
+    logrates[p + 1] = log(state.xi)
+    m = maximum(logrates)
+    isfinite(m) || throw(DomainError(m, "total intensity must be positive with finite log rates"))
+    @turbo for i in eachindex(logrates)
+        rsums[i] = exp(logrates[i] - m)
+    end
+    cumsum!(rsums, rsums)
+    state.logtot = m + log(rsums[end])
     return (logabsdet(C))
 end
 

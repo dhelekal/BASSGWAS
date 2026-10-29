@@ -19,14 +19,17 @@
 Select a batch of distinct experimental targets by greedy expected information
 gain.
 
-`idx_rem` contains the one-based target indices eligible for selection.
-`ec` is an initialized estimator whose candidate positions map to `idx_rem`
-in the same order used during construction. `batch_sz` must not exceed the
-number of candidates.
+`idx_rem` contains distinct one-based target indices eligible for selection.
+`Ufull`, `Sfull`, and `X` describe every prediction target; `icept`, `betas`,
+and `us` contain aligned posterior draws; and `Z` contains their weighted-TGS
+importance weights. `batch_sz` must be a nonnegative integer no greater than
+the number of candidates. A zero-size batch returns an empty batch and zero EIG.
 
 When `idx_fixed` is nonempty, its target indices are forced into the beginning
 of the batch in the supplied order; each fixed index must occur in `idx_rem`
-and fixed indices must be distinct. Remaining targets maximize incremental
+and fixed indices must be distinct. Their count must not exceed `batch_sz`.
+Invalid selection constraints raise `ArgumentError` before EIG computation.
+Remaining targets maximize incremental
 expected information gain unless `randdes=true`, in which case they are chosen
 uniformly using Julia's default RNG. Candidates are removed after selection,
 so the result contains no repeated target.
@@ -37,10 +40,22 @@ are not mutated.
 """
 function optimize_design(ec::EIGest, idx_rem, batch_sz; randdes = false, idx_fixed = Int[])
     n_Y = size(idx_rem, 1)
+    batch_sz isa Integer && 0 <= batch_sz <= n_Y ||
+        throw(ArgumentError("batch_sz must be a nonnegative integer no greater than the number of candidates ($n_Y)"))
+    all(i -> i isa Integer && 1 <= i <= size(X, 1), idx_rem) ||
+        throw(ArgumentError("candidate indices must be integers between 1 and $(size(X, 1))"))
+    allunique(idx_rem) || throw(ArgumentError("candidate indices must be distinct"))
+    n_fixed = length(idx_fixed)
+    n_fixed <= batch_sz || throw(ArgumentError("the number of fixed targets ($n_fixed) must not exceed batch_sz ($batch_sz)"))
+    allunique(idx_fixed) || throw(ArgumentError("fixed target indices must be distinct"))
+    eligible = Set(idx_rem)
+    all(i -> i isa Integer && i in eligible, idx_fixed) ||
+        throw(ArgumentError("every fixed target index must be an eligible candidate in idx_rem"))
+    batch_sz == 0 && return (batch = idx_rem[Int[]], obj = 0.0)
+
     idx_set = collect(1:n_Y)
 
     batch = similar(idx_set, batch_sz)
-    n_fixed = length(idx_fixed)
     e = 0.0
     for i in 1:batch_sz
         obj = eig(ec, idx_set)
