@@ -40,6 +40,32 @@ include("numerical_helpers.jl")
     @test abs(estimate - expected_second_moment) < 6se + 0.001
 end
 
+@testset "Residual variance prior recovery and posterior calibration" begin
+    priors = ((0.8, 0.8), (2.5, 0.8), (6.0, 1.7))
+    for n in (1, 8, 32), (j, (shape, scale)) in enumerate(priors)
+        @testset "identity n=$n shape=$shape scale=$scale" begin
+            C = Matrix{Float64}(I, n, n)
+            check_sigma_calibration(C, shape, scale, 20_000 + 100n + 10j) do Ys, a, b, q, rng
+                BASSGWAS.draw_Ysigma!(Ys, a, b, q, rng)
+            end
+        end
+    end
+    ps = numerical_fixture(4; rank = 3, s = 1.0)
+    gamma = inclusion_vector(5, ps.p)
+    X = ps.Xaug[:, [findall(==(1), gamma); ps.p + 1]]
+    # Build the generative covariance directly, independently of _comp_ssq.
+    C = Matrix{Float64}(I, ps.n, ps.n) + ps.r * ps.U * Diagonal(ps.S) * ps.U' +
+        ps.c * X[:, 1:(end - 1)] * X[:, 1:(end - 1)]' + ps.mc * ones(ps.n, ps.n)
+    XtX, UtX = X' * X, ps.U' * X
+    for (j, (shape, scale)) in enumerate(priors)
+        @testset "correlated n=8 shape=$shape scale=$scale" begin
+            check_sigma_calibration(C, shape, scale, 30_000 + 10j) do Ys, a, b, q, rng
+                BASSGWAS.draw_Ysigma!(Ys, ps.r, ps.c, ps.mc, a, b, X, XtX, UtX, ps.U, ps.S, rng)
+            end
+        end
+    end
+end
+
 @testset "Gaussian coefficient conditional moments" begin
     for rank in (3, 8), mask in (0, 5, 15)
         @testset "rank=$rank model=$mask" begin

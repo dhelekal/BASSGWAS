@@ -321,8 +321,7 @@ function gibbs_CG!(samp::ProbitBVSSampler)
 
     # Positive rescaling changes latent scale without changing the binary observations.
     if scalemv
-        sigma = rand(rng, InverseGamma(shape, scale))
-        Y_new .*= sqrt(sigma)
+        _ = scale_Ysigma!(Y_new, shape, scale, rng)
     end
 
     if scalemv && !scale1
@@ -334,6 +333,18 @@ function gibbs_CG!(samp::ProbitBVSSampler)
     ps.r = r_new
 
     return updateSCache!(sc, ps)
+end
+
+"""
+    scale_Ysigma!(Y, shape, scale, rng)
+
+Draw an auxiliary variance from `InverseGamma(shape, scale)` and multiply `Y`
+in place by its standard deviation. Advance `rng` and return the drawn variance.
+"""
+function scale_Ysigma!(Y, shape, scale, rng)
+    sigma = rand(rng, InverseGamma(shape, scale))
+    Y .*= sqrt(sigma)
+    return sigma
 end
 
 """

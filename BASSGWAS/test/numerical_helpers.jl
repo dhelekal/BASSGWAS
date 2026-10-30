@@ -121,3 +121,40 @@ function check_qcache(qc, ps, gamma)
     @test qc.X1[:, end] == ones(ps.n)
     return @test isapprox(qc.XtX, ps.Xaug[:, active]' * ps.Xaug; rtol = NUM_RTOL, atol = NUM_ATOL)
 end
+
+# Prior-predictive simulation followed by a posterior draw must recover the
+# prior marginal. The conditional PIT additionally detects draws ignoring Y.
+function check_sigma_calibration(draw_sigma!, C, shape, scale, seed)
+    N = 20_000
+    n = size(C, 1)
+    F = cholesky(Symmetric(C))
+    prior = InverseGamma(shape, scale)
+    prior_rng, response_rng, posterior_rng = Xoshiro(seed), Xoshiro(seed + 1), Xoshiro(seed + 2)
+    prior_samples, posterior_samples, conditional_pits = zeros(N), zeros(N), zeros(N)
+    for i in 1:N
+        Ys = F.L * randn(response_rng, n)
+        s = BASSGWAS.scale_Ysigma!(Ys, shape, scale, prior_rng)
+        q = dot(Ys, F \ Ys) # Independent dense reference, before mutation.
+        sigma = draw_sigma!(Ys, shape, scale, q, posterior_rng)
+        prior_samples[i] = s
+        posterior_samples[i] = sigma
+        conditional_pits[i] = cdf(InverseGamma(shape + n / 2, scale + q / 2), sigma)
+    end
+    @test all(s -> isfinite(s) && s > 0, prior_samples)
+    @test all(s -> isfinite(s) && s > 0, posterior_samples)
+    # DKW: P(D_N > bound) <= 1e-6/36. The union bound covers all 12
+    # configurations and their three CDF checks, without assuming independence.
+    bound = sqrt(log(2 * 36 / 1e-6) / (2N))
+    for (label, pits) in (
+            ("prior draws", cdf.(prior, prior_samples)),
+            ("posterior marginal", cdf.(prior, posterior_samples)),
+            ("conditional posterior", conditional_pits),
+        )
+        @testset "$label" begin
+            @test all(u -> isfinite(u) && 0 <= u <= 1, pits)
+            sorted = sort(pits)
+            ks = maximum(max(i / N - u, u - (i - 1) / N) for (i, u) in enumerate(sorted))
+            @test ks <= bound
+        end
+    end
+end

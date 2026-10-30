@@ -61,6 +61,20 @@ rescaling. These two draw routines assume unit residual variance. Deterministic
 comparisons use `rtol=1e-8` and `atol=1e-10` (normalization checks use the stated
 absolute tolerance).
 
+A separate residual-variance calibration test generates 20,000 independent
+prior-predictive datasets per configuration, using `Ys = sqrt(s) * L * randn(n)`
+for `s ~ InverseGamma(shape, scale)` and `L*L' = C`. The prior draw and scaling
+use `scale_Ysigma!`, the same auxiliary scaling step as the sampler.
+It covers identity
+covariances at 1, 8, and 32 observations and a correlated regression/random-effect
+covariance, with three priors including one without a finite mean. Both generated
+`s` and returned `sigma` draws are checked against the analytic prior CDF.
+Dataset-specific posterior CDF transforms additionally check the known
+conditional distribution, so ignoring the data cannot pass by recovering the
+prior alone. Uniform KS statistics use DKW bounds with a total false-rejection
+budget of `1e-6` across 36 checks. These Float64 distributional checks complement
+the cloned-RNG checks above and require no additional testing dependency.
+
 An intercept-only binary probit regression also checks the full sampler's
 posterior second moment against independent numerical integration. Three seeded
 chains and batch-mean error estimates exercise the shift augmentation, beyond
