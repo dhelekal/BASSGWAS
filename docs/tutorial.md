@@ -426,7 +426,7 @@ should only take a few minutes.
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.49074028333028 minutes."
+    ## [1] "Run time: 2.47498900095622 minutes."
 
 When using BASS-GWAS with real data, using up to 4 threads per chain is
 recommended. We recommend running chains for 500 × 1000 iterations and
@@ -744,7 +744,7 @@ Run BASS-GWAS
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.39675165017446 minutes."
+    ## [1] "Run time: 2.31574230194092 minutes."
 
 ### Round 1
 
@@ -792,7 +792,7 @@ Run BASS-GWAS
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.3145688811938 minutes."
+    ## [1] "Run time: 2.46959523359934 minutes."
 
 Compute position PIPs
 
@@ -856,7 +856,7 @@ Run BASS-GWAS
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.48712656497955 minutes."
+    ## [1] "Run time: 2.55403134822845 minutes."
 
 Compute position PIPs
 
@@ -920,7 +920,7 @@ Run BASS-GWAS
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.55722094774246 minutes."
+    ## [1] "Run time: 2.88194285233816 minutes."
 
 Compute position PIPs
 
@@ -984,7 +984,7 @@ Run BASS-GWAS
 
     paste0("Run time: ", difftime(Sys.time(),tbegin,units='mins'), " minutes.")
 
-    ## [1] "Run time: 2.5491888999939 minutes."
+    ## [1] "Run time: 2.49610373576482 minutes."
 
 Compute position PIPs
 

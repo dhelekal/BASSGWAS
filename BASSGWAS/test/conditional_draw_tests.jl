@@ -3,6 +3,26 @@
 
 include("numerical_helpers.jl")
 
+@testset "Full sampler preserves the auxiliary variance prior" begin
+    for (shape, scale) in ((0.8, 0.8), (2.5, 0.8), (6.0, 1.7))
+        @testset "intercept-only shape=$shape scale=$scale" begin
+            check_full_sigma_invariance(shape, scale) do seed
+                ProbitBVSSampler(zeros(4, 0), [0, 0, 1, 1], zeros(4, 0), Float64[], 0.7, 2.3;
+                    mcinit = 1.0, sample_c = false, nu = 2shape, lambda = scale / shape,
+                    nadapt = 1000, adapt_xi = false, xi_init = 5.0, rng = Xoshiro(seed))
+            end
+        end
+        @testset "variable selection and random effects shape=$shape scale=$scale" begin
+            ps = numerical_fixture(2; rank = 3, s = 1.0)
+            check_full_sigma_invariance(shape, scale; min_models = 2) do seed
+                ProbitBVSSampler(ps.Xaug[:, 1:ps.p], Int.(ps.Y .> 0), ps.U, ps.S, ps.alpha, ps.beta;
+                    mcinit = ps.mc, sample_c = true, nu = 2shape, lambda = scale / shape,
+                    nadapt = 1000, adapt_xi = false, xi_init = 5.0, rng = Xoshiro(seed))
+            end
+        end
+    end
+end
+
 @testset "Full probit posterior under shift augmentation" begin
     # With only an intercept b ~ Normal(0, 1) and two outcomes of each class,
     # the marginal posterior is proportional to phi(b) Phi(b)^2 Phi(-b)^2.

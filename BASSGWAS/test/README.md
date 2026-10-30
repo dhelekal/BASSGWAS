@@ -79,6 +79,22 @@ An intercept-only binary probit regression also checks the full sampler's
 posterior second moment against independent numerical integration. Three seeded
 chains and batch-mean error estimates exercise the shift augmentation, beyond
 the fixed-latent-response conditional checks above.
+
+Full-sampler auxiliary-variance invariance is checked separately on fixed binary
+observations, for both an intercept-only model and variable selection with
+rank-three random effects. Each of three inverse-gamma priors uses three local
+seeded chains, 1,000 adaptation steps within 2,000 discarded burn-in transitions,
+and 20,000 retained transitions per chain without thinning. Auxiliary intensity
+is fixed at five so pooled chains share the same tempered target. Returned
+`sigma` CDF values at five analytic prior quantiles are estimated with the
+original `Z` weights, without per-chain renormalization. Forty contiguous
+500-transition batches per chain provide ratio-estimator Monte Carlo errors.
+Deviations must be within six standard errors, and six standard errors must
+not exceed 0.03; these are approximate MCMC criteria, not iid DKW guarantees.
+Positive finite draws and weights, completed adaptation, and visits to multiple
+models in the variable-selection case are also checked. CDF indicators avoid
+requiring a finite mean for the heavy-tailed prior.
+
 ## Dependency caches and reusable workspaces
 
 `workspace_tests.jl` checks independent response/covariance invalidation,

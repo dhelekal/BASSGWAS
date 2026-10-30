@@ -6,6 +6,7 @@ using BASSGWAS
 using LinearAlgebra
 using Random
 using Distributions
+using Statistics: mean, std
 using SpecialFunctions: loggamma
 
 const NUM_RTOL = 1.0e-8
@@ -35,6 +36,56 @@ function numerical_fixture(
     S = rank == 1 ? [0.4] : collect(range(0.4, 1.8; length = rank))
     Y = [0.7, -1.1, 0.3, 1.4, -0.6, 0.2, -0.9, 0.8]
     return BASSGWAS.ParState2(X, Y, U, S, alpha, beta, 1.7, 0.8, s, 4.2)
+end
+
+# Batch influence scores account for both serial dependence and normalization
+# of weighted-TGS estimates. Pool raw weights only across identical targets.
+function check_full_sigma_invariance(make_sampler, shape, scale; min_models = 1)
+    probabilities = [0.1, 0.25, 0.5, 0.75, 0.9]
+    cutoffs = quantile.(InverseGamma(shape, scale), probabilities)
+    seeds = (810, 811, 812)
+    batches_per_chain, batch_length = 40, 500
+    nbatches = length(seeds) * batches_per_chain
+    weighted_counts = zeros(nbatches, length(probabilities))
+    batch_weights = zeros(nbatches)
+    models = Set{Tuple}()
+    for (chain, seed) in enumerate(seeds)
+        sampler = make_sampler(seed)
+        for _ in 1:2000
+            next_step!(sampler)
+        end
+        @test is_adapted(sampler)
+        @test sampler.wTGSState.xi == 5.0
+        valid_sigma, valid_weights = true, true
+        for batch in 1:batches_per_chain
+            row = (chain - 1) * batches_per_chain + batch
+            for _ in 1:batch_length
+                next_step!(sampler)
+                draw = get_state(sampler)
+                valid_sigma &= isfinite(draw.sigma) && draw.sigma > 0
+                valid_weights &= isfinite(draw.Z) && draw.Z > 0
+                push!(models, Tuple(draw.γ))
+                batch_weights[row] += draw.Z
+                for j in eachindex(cutoffs)
+                    weighted_counts[row, j] += draw.Z * (draw.sigma <= cutoffs[j])
+                end
+            end
+        end
+        @test valid_sigma
+        @test valid_weights
+        @test sampler.wTGSState.xi == 5.0
+    end
+    @test length(models) >= min_models
+    estimate = vec(sum(weighted_counts; dims = 1)) / sum(batch_weights)
+    scores = (weighted_counts .- batch_weights .* estimate') ./ mean(batch_weights)
+    se = vec(std(scores; dims = 1)) / sqrt(nbatches)
+    for j in eachindex(probabilities)
+        @testset "CDF probability=$(probabilities[j])" begin
+            # This is an approximate MCMC error criterion, not an iid DKW bound.
+            @test 6se[j] <= 0.03
+            @test abs(estimate[j] - probabilities[j]) <= 6se[j]
+        end
+    end
 end
 
 # These references deliberately do not call any BASSGWAS likelihood, prior,
