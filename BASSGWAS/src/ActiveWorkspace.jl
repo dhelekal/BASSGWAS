@@ -168,7 +168,9 @@ function _active_product_block!(data, lo, hi, worker)
     return 0
 end
 
-"""Synchronize G = X_active' C^-1 X, preserving valid rows across model flips."""
+"""Synchronize G = X_active' C^-1 X, preserving valid rows across model flips.
+Equivalent to s*X_1'X - QX_1'QX, where QX = D UtX
+"""
 function sync_active_products!(qc, sc)
     covariance = sc.covariance
     nan_t = typeof(covariance.r)(NaN)
@@ -208,7 +210,10 @@ function sync_active_products!(qc, sc)
     return nothing
 end
 
-"""Prepare accepted-model factorization and solves, keyed by their exact dependencies."""
+"""Prepare accepted-model factorization and solves, keyed by their exact dependencies.
+Precomputes A, the model covariance matrix, its cholesky factorization, determinant, and quadratic form
+These quantities are used downstream by flip proposals
+"""
 function prepare_active!(qc, sc, c, mc)
     _positive_variance(c, "c")
     _positive_variance(mc, "mc")
@@ -307,6 +312,7 @@ function _candidate_block!(data, lo, hi, worker)
     return 0
 end
 
+"""Compute quadratic forms and determinants for variable addition updates"""
 function candidate_terms!(dets, ssq, qc, sc, c)
     p = length(dets)
     threaded = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && qc.d * p >= CACHE_THREAD_WORK
@@ -318,6 +324,19 @@ function candidate_terms!(dets, ssq, qc, sc, c)
     )
     bad == 0 || throw(PosDefException(bad))
 
+    return nothing
+end
+
+"""Compute quadratic forms and determinants for variable removal updates"""
+function removal_terms!(dets, ssq, qc, c)
+    work = qc.work
+    lc = log(c)
+    @inbounds for i in 1:(qc.d - 1)
+        index = qc.i1_set[i]
+        invdiag = work.invdiag
+        ssq[index] = work.ssq + work.beta[i]^2 / invdiag[i]
+        dets[index] = work.det + log(invdiag[i]) - lc
+    end
     return nothing
 end
 

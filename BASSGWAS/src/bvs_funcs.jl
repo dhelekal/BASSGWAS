@@ -260,13 +260,7 @@ function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     if !isempty(idx0)
         candidate_terms!(dets, ssq, qcache, scache, c)
     end
-    lc = log(c)
-    @inbounds for i in 1:(qcache.d - 1)
-        index = qcache.i1_set[i]
-        invdiag = work.invdiag
-        ssq[index] = work.ssq + work.beta[i]^2 / invdiag[i]
-        dets[index] = work.det + log(invdiag[i]) - lc
-    end
+    removal_terms!(dets, ssq, qcache, c)
     return work.det, work.ssq
 end
 
