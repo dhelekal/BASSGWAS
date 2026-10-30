@@ -251,14 +251,14 @@ end
     comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
 
 Evaluate all one-predictor alternatives with cached covariance-adjusted
-products and a common active Cholesky. Candidate solves use bounded reusable
+products and a common active Cholesky. Addition solves use bounded reusable
 blocks; removal terms use the inverse diagonal and the shared response solve.
 """
 function comp_upd_terms2!(dets, ssq, scache, qcache, c, s, mc, idx1, idx0)
     s == scache.covariance.s || throw(ArgumentError("refresh SCache after changing s"))
     work = prepare_active!(qcache, scache, c, mc)
     if !isempty(idx0)
-        candidate_terms!(dets, ssq, qcache, scache, c)
+        addition_terms!(dets, ssq, qcache, scache, c)
     end
     removal_terms!(dets, ssq, qcache, c)
     return work.det, work.ssq

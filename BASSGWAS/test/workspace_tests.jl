@@ -273,7 +273,7 @@ end
     end
 end
 
-@testset "Candidate failures return to the caller" begin
+@testset "Addition failures return to the caller" begin
     original_threads = BLAS.get_num_threads()
     try
         for blas_threads in (1, 2)
@@ -286,7 +286,7 @@ end
             starts = [fld((worker - 1) * nb, nw) * BASSGWAS.CACHE_BLOCK_COLUMNS + 1 for worker in 1:nw]
             indices = unique([starts;ps.p])
             # Fail each worker separately, the partial final block, then several
-            # workers together. The earliest failing candidate must be reported.
+            # workers together. The earliest failing addition index must be reported.
             for failures in [([index] for index in indices)..., indices]
                 sc.covariance.gramdiag[failures] .= -1.0e100
                 err = try

@@ -44,7 +44,7 @@ including the intercept; `d` is the current model size.
 - `cov_source`: Identity of the `CovarianceState` supplying those rows, or
   `nothing` before synchronization; distinguishes caches with equal counters.
 - `work`: Owned `ActiveWorkspace` with factorization, response-solve,
-  candidate-block and independent proposal storage.
+  addition-block and independent proposal storage.
 """
 mutable struct QCache{T}
     i1_set::Vector{Int}

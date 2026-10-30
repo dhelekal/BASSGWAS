@@ -18,7 +18,7 @@ selection and per-worker stopping. It also checks independent concurrent
 runners, preserved matrix and view types for BLAS dispatch, argument
 validation, and status allocations bounded by worker count. A three-thread
 run exercises uneven partitions.
-Candidate failure tests in `workspace_tests.jl` cover different worker ranges,
+Addition failure tests in `workspace_tests.jl` cover different worker ranges,
 multiple failures, and recovery with single- and multi-threaded BLAS settings.
 
 ## Floating-point state storage

@@ -90,7 +90,7 @@ end
 """
     ActiveWorkspace
 
-Active Cholesky, response solves and bounded, worker-owned candidate scratch.
+Active Cholesky, response solves and bounded, worker-owned scratch for variable additions.
 Let `a` include the active predictors and final intercept. Active matrix and
 vector buffers reserve `allocated_model_size` columns or entries; their leading `a`
 portions contain the current model's quantities.
@@ -109,8 +109,8 @@ portions contain the current model's quantities.
   `inv(A) * X_A' * inv(C) * Y`.
 - `invdiag`: Length-`allocated_model_size` buffer holding `diag(inv(A))` in its first `a`
   entries for predictor-removal updates.
-- `blocks`: One `allocated_model_size × CACHE_BLOCK_COLUMNS` matrix per worker for
-  candidate cross-products and their in-place lower-triangular solves.
+- `blocks`: One `allocated_model_size × CACHE_BLOCK_COLUMNS` matrix per worker for predictor
+  addition cross-products and their in-place lower-triangular solves.
 - `factor_key`: Tuple `(model_generation, covariance_generation, c, mc)`
   identifying the accepted factor. Invalid keys use `typemax(UInt)` counters
   and `NaN` variances.
@@ -279,7 +279,7 @@ function prepare_active!(qc, sc, c, mc)
     return work
 end
 
-function _candidate_block!(data, lo, hi, worker)
+function _addition_block!(data, lo, hi, worker)
     (; dets, ssq, qc, sc, c) = data
     work, d = qc.work, qc.d
     zero_t = zero(c)
@@ -313,12 +313,12 @@ function _candidate_block!(data, lo, hi, worker)
 end
 
 """Compute quadratic forms and determinants for variable addition updates"""
-function candidate_terms!(dets, ssq, qc, sc, c)
+function addition_terms!(dets, ssq, qc, sc, c)
     p = length(dets)
     threaded = Threads.nthreads() > 1 && BLAS.get_num_threads() == 1 && qc.d * p >= CACHE_THREAD_WORK
 
     bad = foreach_block!(
-        _candidate_block!, (; dets, ssq, qc, sc, c), p;
+        _addition_block!, (; dets, ssq, qc, sc, c), p;
         blocksize = CACHE_BLOCK_COLUMNS,
         workers = threaded ? length(qc.work.blocks) : 1
     )
