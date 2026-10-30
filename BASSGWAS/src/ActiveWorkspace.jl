@@ -345,6 +345,7 @@ function prepare_proposal!(qc, sc, r, s, c, mc)
     _positive_variance(mc, "mc")
     proposal, d = qc.work.proposal, qc.d
 
+    # Copy active-model cross product into contiguous storage
     if proposal.design_generation != qc.generation
         @inbounds for j in 1:d
             index = qc.i1_set[j]
@@ -360,15 +361,12 @@ function prepare_proposal!(qc, sc, r, s, c, mc)
         return proposal
     end
 
+    # If random effect scales changed, recompute weights for woodbury identity covariance inverse
     proposal.factor_generation = typemax(UInt)
     proposal.cdet = _covariance_weights!(proposal.d, proposal.d2, proposal.invden, sc.S, r, s, sc.n)
     weighted_design = view(proposal.weighted_design, :, 1:d)
 
-    @inbounds for j in 1:d
-        @turbo for i in 1:sc.ns
-            weighted_design[i, j] = proposal.d[i] * proposal.utx[i, j]
-        end
-    end
+    mul!(weighted_design, Diagonal(proposal.d), view(proposal.utx, :, 1:d))
 
     factor = view(proposal.factor, 1:d, 1:d)
     copyto!(factor, view(proposal.gram, 1:d, 1:d))
@@ -401,9 +399,7 @@ function proposal_terms!(qc, sc, r, c, mc; s = sc.covariance.s)
     proposal = prepare_proposal!(qc, sc, r, s, c, mc)
     d, response = qc.d, sc.response
 
-    @inbounds @turbo for i in 1:sc.ns
-        proposal.weighted_y[i] = proposal.d2[i] * response.yu[i]
-    end
+    proposal.weighted_y .= proposal.d2 .* response.yu
 
     fx = view(proposal.fx, 1:d)
     copyto!(fx, view(response.yx, qc.i1_set))
@@ -450,9 +446,7 @@ function shift_terms!(qc, sc, Y)
 
     if sc.ns > 0
         mul!(fx, transpose(view(proposal.utx, :, 1:d)), proposal.weighted_y, -one_t, inv(proposal.s))
-        @inbounds for i in 1:sc.ns
-            proposal.weighted_y[i] = proposal.d2[i] * sc.UtX[i, sc.paug]
-        end
+        @views proposal.weighted_y .= proposal.d2 .* sc.UtX[:, sc.paug]
         mul!(ones_fx, transpose(view(proposal.utx, :, 1:d)), proposal.weighted_y, -one_t, inv(proposal.s))
     else
         fx ./= proposal.s
@@ -477,9 +471,7 @@ function response_ssq!(qc, sc, Y)
     if sc.ns > 0
         mul!(proposal.yu, transpose(sc.U), Y)
         mul!(proposal.residual, sc.U, proposal.yu, -one_t, one_t)
-        @inbounds @turbo for i in 1:sc.ns
-            proposal.weighted_y[i] = proposal.d2[i] * proposal.yu[i]
-        end
+        proposal.weighted_y .= proposal.d2 .* proposal.yu
         mul!(fx, transpose(view(proposal.utx, :, 1:d)), proposal.weighted_y, -one_t, inv(proposal.s))
     else
         fx ./= proposal.s

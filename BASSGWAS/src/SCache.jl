@@ -307,9 +307,7 @@ end
 function _refresh_response_terms!(sc)
     covariance, response, data = sc.covariance, sc.response, sc.data
 
-    @inbounds @turbo for i in eachindex(response.weighted)
-        response.weighted[i] = covariance.d2[i] * response.yu[i]
-    end
+    response.weighted .= covariance.d2 .* response.yu
 
     copyto!(response.fx, response.yx)
 

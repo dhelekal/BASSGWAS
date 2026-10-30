@@ -160,9 +160,7 @@ function init_state2(
     logrates[p + 1] = log(xi_init)
     m = maximum(logrates)
     isfinite(m) || throw(DomainError(m, "total intensity must be positive with finite log rates"))
-    @turbo for i in eachindex(logrates)
-        rsums[i] = exp(logrates[i] - m)
-    end
+    rsums .= exp.(logrates .- m)
     cumsum!(rsums, rsums)
     logtot = m + log(rsums[end])
 
@@ -202,9 +200,7 @@ function update_state2!(
     logrates[p + 1] = log(xi)
     m = maximum(logrates)
     isfinite(m) || throw(DomainError(m, "total intensity must be positive with finite log rates"))
-    @turbo for i in eachindex(logrates)
-        rsums[i] = exp(logrates[i] - m)
-    end
+    rsums .= exp.(logrates .- m)
     cumsum!(rsums, rsums)
     state.logtot = m + log(rsums[end])
     return rsums
@@ -360,9 +356,7 @@ function comp_llrs!(
         blocksize = max(cld(n, nt), 1), workers = nt
     )
 
-    for i in idx1
-        llrs[i] += lpr_excl - lpr_incl
-    end
+    @views llrs[idx1] .+= lpr_excl - lpr_incl
 
     return nothing
 end
@@ -428,9 +422,7 @@ function _update_state_test!(
     logrates[p + 1] = log(state.xi)
     m = maximum(logrates)
     isfinite(m) || throw(DomainError(m, "total intensity must be positive with finite log rates"))
-    @turbo for i in eachindex(logrates)
-        rsums[i] = exp(logrates[i] - m)
-    end
+    rsums .= exp.(logrates .- m)
     cumsum!(rsums, rsums)
     state.logtot = m + log(rsums[end])
     return (logabsdet(C))
